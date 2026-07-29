@@ -22,7 +22,7 @@
   versions,
   # Override knobs
   pname ? "osu-wine",
-  location ? "$HOME/.local/share/osu-winello",
+  location ? "$HOME/.local/share/nix-osu-stable",
   useGameMode ? true,
   preCommands ? "",
   postCommands ? "",
@@ -111,8 +111,8 @@ let
         export WINE_GST_REGISTRY_DIR="''${WINEPREFIX}/gstreamer-1.0"
       fi
 
-      info() { echo -e '\033[1;34m'"osu-winello:\033[0m $*"; }
-      err() { echo -e '\033[1;31m'"osu-winello:\033[0m $*" >&2; }
+      info() { echo -e '\033[1;34m'"nix-osu-stable:\033[0m $*"; }
+      err() { echo -e '\033[1;31m'"nix-osu-stable:\033[0m $*" >&2; }
 
       ensure_gstreamer_dir() {
         if [ -n "''${WINE_GST_REGISTRY_DIR:-}" ]; then
@@ -159,7 +159,7 @@ let
         if [ -d "$WINEPREFIX_DIR" ] && [ -r "$WINEPREFIX_DIR/system.reg" ] && [ -w "$WINEPREFIX_DIR" ]; then
           return 0
         fi
-        info "Seeding wineprefix from packaged osu-winello prefix"
+        info "Seeding wineprefix from packaged prefix"
         mkdir -p "$(dirname "$WINEPREFIX_DIR")"
         if [ -e "$WINEPREFIX_DIR" ]; then
           chmod -R u+w "$WINEPREFIX_DIR" 2>/dev/null || true
@@ -344,7 +344,7 @@ let
   desktopItem = makeDesktopItem {
     name = pname;
     exec = "${script}/bin/${pname} %U";
-    icon = "osu-winello";
+    icon = "nix-osu-stable";
     comment = "osu!stable (yawl + wine-osu)";
     desktopName = "osu!(stable)";
     categories = [
@@ -368,8 +368,8 @@ symlinkJoin {
   ];
 
   meta = {
-    description = "Declarative osu!stable launcher using winello's wine-osu + yawl stack";
-    homepage = "https://github.com/NelloKudo/osu-winello";
+    description = "Declarative osu!stable launcher using wine-osu + yawl";
+    homepage = "https://github.com/gaavin/nix-osu-stable";
     license = lib.licenses.unfree;
     platforms = [ "x86_64-linux" ];
     mainProgram = pname;

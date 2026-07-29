@@ -1,5 +1,5 @@
 {
-  description = "Declarative osu!stable on Nix using osu-winello's wine-osu + yawl stack";
+  description = "Declarative osu!stable on Nix (wine-osu + yawl stack, inspired by osu-winello)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

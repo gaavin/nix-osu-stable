@@ -1,4 +1,4 @@
-# nix-osu-winello
+# nix-osu-stable
 
 Declarative [osu!stable](https://osu.ppy.sh) on Nix using the same dependency stack as
 [osu-winello](https://github.com/NelloKudo/osu-winello): **WineBuilder wine-osu** +
@@ -11,14 +11,14 @@ taken from upstream winello; packaging and first-run install are Nix-native.
 ## Quick start
 
 ```bash
-nix run github:gaavin/nix-osu-winello
+nix run github:gaavin/nix-osu-stable
 # or from a checkout:
 nix run .
 ```
 
 First launch will:
 
-1. Copy yawl into `~/.local/share/osu-winello/runtime` and create a wine-osu wrapper
+1. Copy yawl into `~/.local/share/nix-osu-stable/runtime` and create a wine-osu wrapper
 2. Download/verify the Steam Runtime via yawl (can be large; runs under `steam-run` on NixOS)
 3. Seed the wineprefix from the packaged winello prefix
 4. Run `osu!install.exe` if the game is not installed yet
@@ -48,17 +48,17 @@ nix build .#osu-wine
 ```nix
 # flake.nix
 {
-  inputs.nix-osu-winello.url = "github:gaavin/nix-osu-winello";
+  inputs.nix-osu-stable.url = "github:gaavin/nix-osu-stable";
 
   # home.packages / environment.systemPackages:
-  # inputs.nix-osu-winello.packages.${pkgs.system}.osu-wine
+  # inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine
 }
 ```
 
 ### Overrides
 
 ```nix
-inputs.nix-osu-winello.packages.${pkgs.system}.osu-wine.override {
+inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine.override {
   location = "$HOME/Games/osu";
   useGameMode = true;
   preCommands = ''echo starting'';
@@ -67,12 +67,12 @@ inputs.nix-osu-winello.packages.${pkgs.system}.osu-wine.override {
 
 ## State layout
 
-Default `location` is `~/.local/share/osu-winello` (override with the `location`
+Default `location` is `~/.local/share/nix-osu-stable` (override with the `location`
 package argument, or at runtime with the `LOCATION` env var — must be under a path
 visible to `steam-run`, typically somewhere under `$HOME`):
 
 ```
-~/.local/share/osu-winello/
+~/.local/share/nix-osu-stable/
   runtime/          # yawl binary + yawl-winello wrapper + steam-run helper scripts
   wineprefix/       # seeded then mutated by Wine
   osu/              # game install (osu!.exe, Songs, …)
