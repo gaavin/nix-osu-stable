@@ -40,6 +40,9 @@
         program = "${packages.osu-wine}/bin/osu-wine";
       };
 
+      homeModules.osu-stable = ./modules/home-manager/osu-stable.nix;
+      homeModules.default = self.homeModules.osu-stable;
+
       overlays.default = final: _prev: {
         inherit (self.packages.${final.stdenv.hostPlatform.system} or packages)
           wine-osu

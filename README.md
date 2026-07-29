@@ -18,15 +18,43 @@ nix run .
 
 First launch will:
 
-1. Copy yawl into `~/.local/share/nix-osu-stable/runtime` and create a wine-osu wrapper
+1. Write yawl configs pointing at packaged wine-osu (`YAWL_VERBS=config=osu`)
 2. Download/verify the Steam Runtime via yawl (can be large; runs under `steam-run` on NixOS)
 3. Seed the wineprefix from the packaged winello prefix
 4. Run `osu!install.exe` if the game is not installed yet
 
-`steam-run` is required so yawl’s Steam Runtime binaries can execute on NixOS (normal
-dynamic linker paths). It is pulled in as a dependency of `osu-wine`.
+`steam-run` is required so yawl’s Steam Runtime binaries can execute on NixOS. It is
+pulled in as a dependency of `osu-wine`.
 
 Then start the game with `osu-wine` / `nix run .`.
+
+## Home Manager (recommended)
+
+```nix
+# flake.nix — pass the flake into HM
+home-manager.extraSpecialArgs = {
+  inherit (inputs) nix-osu-stable;
+};
+
+# home.nix
+{ nix-osu-stable, pkgs, ... }:
+{
+  imports = [ nix-osu-stable.homeModules.osu-stable ];
+
+  programs.osu-stable = {
+    enable = true;
+    package = nix-osu-stable.packages.${pkgs.system}.osu-wine;
+    # location = "${config.xdg.dataHome}/nix-osu-stable"; # default
+    # gamemode = true;
+    # environment.WINEFSYNC = "1";
+    # preLaunchArgs = "mangohud";
+    # postLaunchArgs = "-devserver akatsuki.gg";
+  };
+}
+```
+
+The module generates a store env file sourced at launch and refreshes yawl wine
+`exec=` configs on activation when wine-osu changes.
 
 ## Packages
 
@@ -43,42 +71,41 @@ nix build .#wine-osu
 nix build .#osu-wine
 ```
 
-## As a flake input
+## As a flake input (package only)
 
 ```nix
-# flake.nix
-{
-  inputs.nix-osu-stable.url = "github:gaavin/nix-osu-stable";
-
-  # home.packages / environment.systemPackages:
-  # inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine
-}
+home.packages = [
+  inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine
+];
 ```
 
-### Overrides
+### Package overrides
 
 ```nix
 inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine.override {
   location = "$HOME/Games/osu";
   useGameMode = true;
-  preCommands = ''echo starting'';
+  environment.mesa_glthread = "true";
+  preLaunchArgs = "mangohud";
 }
 ```
 
 ## State layout
 
 Default `location` is `~/.local/share/nix-osu-stable` (override with the `location`
-package argument, or at runtime with the `LOCATION` env var — must be under a path
-visible to `steam-run`, typically somewhere under `$HOME`):
+package/module option, or at runtime with `LOCATION` — must be under `$HOME` for
+`steam-run`):
 
 ```
 ~/.local/share/nix-osu-stable/
-  runtime/          # yawl binary + yawl-winello wrapper + steam-run helper scripts
+  yawl/             # Steam Runtime + configs/osu.cfg + configs/osuserver.cfg
   wineprefix/       # seeded then mutated by Wine
   osu/              # game install (osu!.exe, Songs, …)
+  .wine-wrap        # steam-run + yawl helpers (recreated as needed)
+  .wineserver-wrap
 ```
 
-yawl itself also keeps Steam Runtime data under `~/.local/share/yawl/` by default.
+yawl may also keep Steam Runtime data under its default cache paths.
 
 Nix owns tool versions; there is no `osu-wine --update`. Bump pins in
 [`versions.nix`](./versions.nix) instead.
