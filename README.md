@@ -21,7 +21,9 @@ First launch will:
 1. Write yawl configs pointing at packaged wine-osu (`YAWL_VERBS=config=osu`)
 2. Download/verify the Steam Runtime via yawl (can be large; runs under `steam-run` on NixOS)
 3. Seed the wineprefix from the packaged winello prefix
-4. Run `osu!install.exe` if the game is not installed yet
+4. Download the **latest** osu! installer from ppy (`m1.ppy.sh`) into `…/osu/osu!.exe`
+   with a visible progress bar (same approach as winello; not pinned in the Nix store).
+   The first game launch then self-updates the client
 
 `steam-run` is required so yawl’s Steam Runtime binaries can execute on NixOS. It is
 pulled in as a dependency of `osu-wine`.
@@ -113,9 +115,10 @@ Nix owns tool versions; there is no `osu-wine --update`. Bump pins in
 ## Launcher commands
 
 ```
-osu-wine              # launch
+osu-wine                 # launch (downloads installer on first run if missing)
 osu-wine --help
 osu-wine --info
+osu-wine --download-osu  # re-fetch latest installer bootstrap
 osu-wine --winecfg
 osu-wine --winetricks [args]
 osu-wine --regedit
@@ -123,6 +126,8 @@ osu-wine --wine <args>
 osu-wine --kill / --kill9
 osu-wine --devserver <host>
 ```
+
+Override the installer URL at runtime with `OSU_DOWNLOAD_URL=…` if needed.
 
 ## Bumping versions
 
@@ -136,7 +141,7 @@ nix flake prefetch <url>
 nix-prefetch-url --type sha256 <url> | xargs nix hash convert --hash-algo sha256 --to sri
 ```
 
-For `osu!install.exe`, pass `--name osuinstall.exe` (the `!` is illegal in store names).
+The osu! installer itself is **not** hashed — it is downloaded at launch time.
 
 ## Credits
 

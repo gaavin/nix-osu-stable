@@ -28,9 +28,8 @@
     hash = "sha256-kn3mKfwpeTRScvxbH7jKbo+7zGDIozFkNVW8BmbayvQ=";
   };
 
+  # Fetched at runtime (not a FOD) so users always get the current installer.
   osuInstall = {
     url = "https://m1.ppy.sh/r/osu!install.exe";
-    name = "osuinstall.exe";
-    hash = "sha256-bhgsENGBMgnRJ1Pbxws6W7oA/vTs9kvEIFGHDm3+S30=";
   };
 }

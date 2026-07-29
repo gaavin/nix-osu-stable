@@ -1,6 +1,5 @@
 {
   lib,
-  fetchurl,
   makeDesktopItem,
   symlinkJoin,
   writeShellApplication,
@@ -12,6 +11,8 @@
   winetricks,
   steam-run,
   coreutils,
+  curl,
+  wget,
   gnugrep,
   gnused,
   gawk,
@@ -41,9 +42,7 @@ let
     optionalString
     ;
 
-  osuInstall = fetchurl {
-    inherit (versions.osuInstall) url name hash;
-  };
+  osuDownloadUrl = versions.osuInstall.url;
 
   mergedEnvironment =
     {
@@ -72,6 +71,8 @@ let
     name = pname;
     runtimeInputs = [
       coreutils
+      curl
+      wget
       gnugrep
       gnused
       gawk
@@ -97,7 +98,7 @@ let
       WINE_OSU="${wine-osu}"
       YAWL_BIN="${yawl}/bin/yawl"
       PREFIX_SEED="${osu-wineprefix}"
-      OSU_INSTALL="${osuInstall}"
+      OSU_DOWNLOAD_URL="''${OSU_DOWNLOAD_URL:-${osuDownloadUrl}}"
       STEAM_RUN="${steam-run}/bin/steam-run"
       MARKER_YAWL="$YAWL_INSTALL_DIR/.runtime-ready"
       MARKER_WINE="$YAWL_INSTALL_DIR/.wine-osu"
@@ -175,8 +176,43 @@ let
         fi
       }
 
+      link_osu_drive() {
+        mkdir -p "$WINEPREFIX_DIR/dosdevices" "$OSUPATH"
+        ln -sfn "$WINEPREFIX_DIR/drive_c/" "$WINEPREFIX_DIR/dosdevices/c:"
+        ln -sfn / "$WINEPREFIX_DIR/dosdevices/z:"
+        ln -sfn "$OSUPATH" "$WINEPREFIX_DIR/dosdevices/d:"
+      }
+
+      # Match winello longPathsFix: rename bundled prefix user + wire dosdevices.
+      ensure_prefix_tuned() {
+        local marker="$WINEPREFIX_DIR/.nix-osu-stable-tuned"
+        if [ -f "$marker" ]; then
+          link_osu_drive
+          return 0
+        fi
+        local user
+        user="$(whoami)"
+        if [ -f "$WINEPREFIX_DIR/user.reg" ]; then
+          sed -i -e "s|nellokudo|''${user}|g" \
+            "$WINEPREFIX_DIR/userdef.reg" \
+            "$WINEPREFIX_DIR/user.reg" \
+            "$WINEPREFIX_DIR/system.reg" 2>/dev/null || true
+        fi
+        if [ -d "$WINEPREFIX_DIR/drive_c/users/nellokudo" ]; then
+          if [ ! -e "$WINEPREFIX_DIR/drive_c/users/$user" ]; then
+            mv "$WINEPREFIX_DIR/drive_c/users/nellokudo" "$WINEPREFIX_DIR/drive_c/users/$user"
+          else
+            rm -rf "$WINEPREFIX_DIR/drive_c/users/nellokudo"
+          fi
+        fi
+        link_osu_drive
+        "$WINE" wineboot -u >/dev/null 2>&1 || true
+        touch "$marker"
+      }
+
       ensure_prefix() {
         if [ -d "$WINEPREFIX_DIR" ] && [ -r "$WINEPREFIX_DIR/system.reg" ] && [ -w "$WINEPREFIX_DIR" ]; then
+          ensure_prefix_tuned
           return 0
         fi
         info "Seeding wineprefix"
@@ -188,6 +224,7 @@ let
         mkdir -p "$WINEPREFIX_DIR"
         cp -a --no-preserve=mode "$PREFIX_SEED"/. "$WINEPREFIX_DIR/"
         chmod -R u+rwX "$WINEPREFIX_DIR"
+        ensure_prefix_tuned
       }
 
       ensure_gstreamer_dir() {
@@ -196,40 +233,84 @@ let
         fi
       }
 
+      # Same as winello: fetch latest osu!install.exe into the game dir as osu!.exe.
+      download_osu_bootstrap() {
+        local dest="$1"
+        local tmp
+        mkdir -p "$(dirname "$dest")"
+        tmp="$(mktemp "''${dest}.XXXXXX.tmp")"
+        info "Downloading latest osu! installer"
+        info "  from: $OSU_DOWNLOAD_URL"
+        info "  to:   $dest"
+        if curl -fL --progress-bar -o "$tmp" "$OSU_DOWNLOAD_URL"; then
+          :
+        elif wget --show-progress -O "$tmp" "$OSU_DOWNLOAD_URL"; then
+          :
+        else
+          rm -f "$tmp"
+          err "Failed to download osu! installer (need network + curl/wget)"
+          return 1
+        fi
+        if [ ! -s "$tmp" ]; then
+          rm -f "$tmp"
+          err "Downloaded installer is empty"
+          return 1
+        fi
+        # PE/MZ header sanity check
+        if [ "$(head -c 2 "$tmp")" != "MZ" ]; then
+          rm -f "$tmp"
+          err "Download does not look like a Windows executable"
+          return 1
+        fi
+        mv -f "$tmp" "$dest"
+        chmod u+rw "$dest"
+        info "osu! bootstrap ready ($(du -h "$dest" | cut -f1))"
+      }
+
       ensure_osu() {
         local osu_exe="$OSUPATH/osu!.exe"
-        if [ -f "$osu_exe" ]; then
+        local force="''${1:-}"
+
+        if [ "$force" = "force" ]; then
+          info "Re-downloading latest osu! installer..."
+          rm -f "$osu_exe"
+        fi
+
+        if [ -s "$osu_exe" ]; then
+          link_osu_drive
           return 0
         fi
-        info "osu! not found; running installer (GUI)..."
-        mkdir -p "$OSUPATH"
-        local user
+
+        # Adopt a prior GUI install if one landed under the prefix.
+        local user found="" c
         user="$(whoami)"
-        "$WINE" "$OSU_INSTALL" || true
         local candidates=(
           "$WINEPREFIX_DIR/drive_c/users/$user/AppData/Local/osu!"
           "$WINEPREFIX_DIR/drive_c/users/steamuser/AppData/Local/osu!"
           "$WINEPREFIX_DIR/drive_c/osu!"
+          "$WINEPREFIX_DIR/drive_c/osu"
         )
-        local found="" c
         for c in "''${candidates[@]}"; do
-          if [ -f "$c/osu!.exe" ]; then
+          if [ -s "$c/osu!.exe" ]; then
             found="$c"
             break
           fi
         done
-        if [ -z "$found" ]; then
-          [ -f "$osu_exe" ] && return 0
-          err "Could not locate installed osu!.exe after installer finished."
-          err "Place osu! under $OSUPATH or re-run."
-          return 1
+        if [ -n "$found" ]; then
+          info "Moving existing osu! from $found -> $OSUPATH"
+          mkdir -p "$OSUPATH"
+          shopt -s dotglob nullglob
+          mv "$found"/* "$OSUPATH/" 2>/dev/null || true
+          shopt -u dotglob nullglob
+          rmdir "$found" 2>/dev/null || true
         fi
-        info "Moving osu! from $found -> $OSUPATH"
-        shopt -s dotglob nullglob
-        mv "$found"/* "$OSUPATH/" 2>/dev/null || true
-        shopt -u dotglob nullglob
-        rmdir "$found" 2>/dev/null || true
-        [ -f "$osu_exe" ] || {
+
+        if [ ! -s "$osu_exe" ]; then
+          download_osu_bootstrap "$osu_exe"
+        fi
+
+        link_osu_drive
+        [ -s "$osu_exe" ] || {
           err "osu!.exe still missing under $OSUPATH"
           return 1
         }
@@ -264,18 +345,20 @@ let
         cat <<EOF
       Usage: ${pname} [command]
 
-        (no args)       Launch osu!
-        --help          Show this help
-        --info          Show paths
-        --winecfg       Run winecfg
-        --winetricks    Run winetricks
-        --regedit       Run regedit
-        --wine <args>   Run wine with args
+        (no args)         Launch osu!
+        --help            Show this help
+        --info            Show paths
+        --download-osu    Re-download latest osu! installer bootstrap
+        --winecfg         Run winecfg
+        --winetricks      Run winetricks
+        --regedit         Run regedit
+        --wine <args>     Run wine with args
         --kill / --kill9
-        --devserver <h> Launch with -devserver <h>
+        --devserver <h>   Launch with -devserver <h>
 
       State: $STATE_DIR
       Config: $CONFIG_FILE
+      Installer URL: $OSU_DOWNLOAD_URL
       EOF
       }
 
@@ -290,7 +373,14 @@ let
       yawl dir:   $YAWL_INSTALL_DIR
       wine-osu:   $WINE_OSU
       config:     $CONFIG_FILE
+      installer:  $OSU_DOWNLOAD_URL
       EOF
+          exit 0
+          ;;
+        --download-osu)
+          prepare
+          ensure_osu force
+          info "Done. Run ${pname} to launch."
           exit 0
           ;;
         --kill) prepare; "$WINESERVER" -k; exit 0 ;;
@@ -351,6 +441,7 @@ symlinkJoin {
   passthru = {
     inherit wine-osu yawl osu-wineprefix;
     envConfig = resolvedConfig;
+    inherit osuDownloadUrl;
   };
   meta = {
     description = "Declarative osu!stable launcher using wine-osu + yawl";
