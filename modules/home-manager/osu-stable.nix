@@ -39,8 +39,12 @@ in
 
     gamemode = mkOption {
       type = types.bool;
-      default = true;
-      description = "Wrap launches with gamemoderun.";
+      default = false;
+      description = ''
+        Wrap launches with gamemoderun. Requires a working GameMode daemon
+        (e.g. programs.gamemode.enable on NixOS). Off by default — gamemode
+        preload often breaks inside yawl/steam-run.
+      '';
     };
 
     environment = mkOption {

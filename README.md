@@ -47,7 +47,7 @@ home-manager.extraSpecialArgs = {
     enable = true;
     package = nix-osu-stable.packages.${pkgs.system}.osu-wine;
     # location = "${config.xdg.dataHome}/nix-osu-stable"; # default
-    # gamemode = true;
+    # gamemode = false; # default; needs programs.gamemode.enable if true
     # environment.WINEFSYNC = "1";
     # preLaunchArgs = "mangohud";
     # postLaunchArgs = "-devserver akatsuki.gg";
@@ -86,7 +86,7 @@ home.packages = [
 ```nix
 inputs.nix-osu-stable.packages.${pkgs.system}.osu-wine.override {
   location = "$HOME/Games/osu";
-  useGameMode = true;
+  useGameMode = false;
   environment.mesa_glthread = "true";
   preLaunchArgs = "mangohud";
 }

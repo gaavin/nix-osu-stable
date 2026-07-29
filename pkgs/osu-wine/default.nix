@@ -24,7 +24,7 @@
   versions,
   pname ? "osu-wine",
   location ? "$HOME/.local/share/nix-osu-stable",
-  useGameMode ? true,
+  useGameMode ? false,
   # Path to a shell-sourceable env file (HM generates one; package ships a default).
   configFile ? null,
   environment ? { },
@@ -180,34 +180,43 @@ let
         mkdir -p "$WINEPREFIX_DIR/dosdevices" "$OSUPATH"
         ln -sfn "$WINEPREFIX_DIR/drive_c/" "$WINEPREFIX_DIR/dosdevices/c:"
         ln -sfn / "$WINEPREFIX_DIR/dosdevices/z:"
-        ln -sfn "$OSUPATH" "$WINEPREFIX_DIR/dosdevices/d:"
+        # Drop a previous D:→osu link so it does not collide with Wine disk letters.
+        if [ -L "$WINEPREFIX_DIR/dosdevices/d:" ]; then
+          local dtarget
+          dtarget="$(readlink -f "$WINEPREFIX_DIR/dosdevices/d:" 2>/dev/null || true)"
+          if [ -n "$dtarget" ] && [ "$dtarget" = "$(realpath "$OSUPATH")" ]; then
+            rm -f "$WINEPREFIX_DIR/dosdevices/d:"
+          fi
+        fi
+        # Prefer O: for the game dir so Wine's auto disk letters (D:) don't collide.
+        rm -f "$WINEPREFIX_DIR/dosdevices/o::"
+        ln -sfn "$OSUPATH" "$WINEPREFIX_DIR/dosdevices/o:"
       }
 
       # Match winello longPathsFix: rename bundled prefix user + wire dosdevices.
       ensure_prefix_tuned() {
         local marker="$WINEPREFIX_DIR/.nix-osu-stable-tuned"
-        if [ -f "$marker" ]; then
-          link_osu_drive
-          return 0
-        fi
-        local user
-        user="$(whoami)"
-        if [ -f "$WINEPREFIX_DIR/user.reg" ]; then
-          sed -i -e "s|nellokudo|''${user}|g" \
-            "$WINEPREFIX_DIR/userdef.reg" \
-            "$WINEPREFIX_DIR/user.reg" \
-            "$WINEPREFIX_DIR/system.reg" 2>/dev/null || true
-        fi
-        if [ -d "$WINEPREFIX_DIR/drive_c/users/nellokudo" ]; then
-          if [ ! -e "$WINEPREFIX_DIR/drive_c/users/$user" ]; then
-            mv "$WINEPREFIX_DIR/drive_c/users/nellokudo" "$WINEPREFIX_DIR/drive_c/users/$user"
-          else
-            rm -rf "$WINEPREFIX_DIR/drive_c/users/nellokudo"
+        if [ ! -f "$marker" ]; then
+          local user
+          user="$(whoami)"
+          if [ -f "$WINEPREFIX_DIR/user.reg" ]; then
+            sed -i -e "s|nellokudo|''${user}|g" \
+              "$WINEPREFIX_DIR/userdef.reg" \
+              "$WINEPREFIX_DIR/user.reg" \
+              "$WINEPREFIX_DIR/system.reg" 2>/dev/null || true
           fi
+          if [ -d "$WINEPREFIX_DIR/drive_c/users/nellokudo" ]; then
+            if [ ! -e "$WINEPREFIX_DIR/drive_c/users/$user" ]; then
+              mv "$WINEPREFIX_DIR/drive_c/users/nellokudo" "$WINEPREFIX_DIR/drive_c/users/$user"
+            else
+              rm -rf "$WINEPREFIX_DIR/drive_c/users/nellokudo"
+            fi
+          fi
+          # wineboot may recreate dosdevices; re-link after.
+          "$WINE" wineboot -u >/dev/null 2>&1 || true
+          touch "$marker"
         fi
         link_osu_drive
-        "$WINE" wineboot -u >/dev/null 2>&1 || true
-        touch "$marker"
       }
 
       ensure_prefix() {
@@ -316,6 +325,13 @@ let
         }
       }
 
+      # Unix path -> Wine Z:\… path (works under yawl/steam-run without relying on cwd).
+      unix_to_wine_path() {
+        local p
+        p="$(realpath "$1")"
+        printf 'Z:%s' "''${p//\//\\}"
+      }
+
       launch_osu() {
         local -a pre_args=()
         if [ -n "''${PRE_LAUNCH_ARGS:-}" ]; then
@@ -330,9 +346,25 @@ let
           read -r -a post_args <<<"''${POST_LAUNCH_ARGS}"
         fi
 
-        info "Launching $OSUPATH/osu!.exe ''${post_args[*]}"
-        cd "$OSUPATH"
-        "''${pre_args[@]}" "$WINE" "osu!.exe" "''${post_args[@]}"
+        local osu_exe wine_exe
+        osu_exe="$OSUPATH/osu!.exe"
+        [ -s "$osu_exe" ] || {
+          err "Missing $osu_exe"
+          return 1
+        }
+
+        # Keep osu! path visible inside pressure-vessel.
+        mkdir -p "$OSUPATH"
+        PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:$(realpath "$OSUPATH")"
+        [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
+        export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
+
+        wine_exe="$(unix_to_wine_path "$osu_exe")"
+        info "Launching $osu_exe"
+        info "  wine path: $wine_exe"
+        # Do not cd into the game dir — Wine/yawl often cannot use a custom drive as cwd.
+        cd "$HOME"
+        "''${pre_args[@]}" "$WINE" "$wine_exe" "''${post_args[@]}"
       }
 
       prepare() {
