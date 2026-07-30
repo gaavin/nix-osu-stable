@@ -30,6 +30,11 @@ pulled in as a dependency of `osu-wine`.
 
 Then start the game with `osu-wine` / `nix run .`.
 
+Opening `.osz` / `.osk` / `.osr` files or `osu://` links (osu!direct) reuses the
+**already-running** game when possible: the launcher enters the existing yawl
+container (`YAWL_VERBS=enter=…`) instead of starting a second window. If osu! is
+not running, it starts a single new instance via Wine ProgID associations.
+
 ## Home Manager (recommended)
 
 ```nix
@@ -62,11 +67,11 @@ The module generates a store env file sourced at launch and refreshes yawl wine
 
 | Attribute | Description |
 | --- | --- |
-| `osu-wine` (default) | Launcher + desktop entry + mime types |
+| `osu-wine` (default) | Launcher + desktop entries + mime/handler |
 | `wine-osu` | NelloKudo WineBuilder binaries |
 | `yawl` | Steam-runtime wine launcher |
 | `osu-wineprefix` | Prebuilt prefix seed |
-| `osu-mime` | File associations + icon |
+| `osu-mime` | File associations, icon, osu-handler-wine |
 
 ```bash
 nix build .#wine-osu
@@ -119,6 +124,7 @@ osu-wine                 # launch (downloads installer on first run if missing)
 osu-wine --help
 osu-wine --info
 osu-wine --download-osu  # re-fetch latest installer bootstrap
+osu-wine --osuhandler <file|osu://url>  # open map/skin/replay/link (reuse instance)
 osu-wine --winecfg
 osu-wine --winetricks [args]
 osu-wine --regedit
@@ -146,6 +152,7 @@ The osu! installer itself is **not** hashed — it is downloaded at launch time.
 ## Credits
 
 - [NelloKudo/osu-winello](https://github.com/NelloKudo/osu-winello) — reference for versions, yawl setup, prefix, and defaults
+- [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — file/URL handoff into a running Wine osu!
 - [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu builds
 - [whrvt/yawl](https://github.com/whrvt/yawl) — Steam Runtime wine launcher
 - [fufexan/nix-gaming](https://github.com/fufexan/nix-gaming) `osu-stable` — first-run installer pattern

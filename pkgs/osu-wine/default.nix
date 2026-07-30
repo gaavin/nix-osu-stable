@@ -20,6 +20,7 @@
   gzip,
   xz,
   findutils,
+  procps,
   gamemode,
   versions,
   pname ? "osu-wine",
@@ -80,6 +81,7 @@ let
       gzip
       xz
       findutils
+      procps
       winetricks
       steam-run
     ]
@@ -104,6 +106,9 @@ let
       MARKER_WINE="$YAWL_INSTALL_DIR/.wine-osu"
       WINE_WRAP="$STATE_DIR/.wine-wrap"
       WINESERVER_WRAP="$STATE_DIR/.wineserver-wrap"
+      OSU_HANDLER_BIN="${osu-mime}/bin/osu-handler-wine"
+      OSU_HANDLER_REG="${osu-mime}/share/nix-osu-stable/osu-handler.reg"
+      MARKER_HANDLER_REG="$WINEPREFIX_DIR/.nix-osu-stable-handler-reg"
 
       export YAWL_INSTALL_DIR
       export WINEPREFIX="$WINEPREFIX_DIR"
@@ -219,9 +224,23 @@ let
         link_osu_drive
       }
 
+      # ProgIDs for .osz/.osk/.osr and osu:// (O:\osu!.exe — matches link_osu_drive).
+      ensure_handler_reg() {
+        if [ -f "$MARKER_HANDLER_REG" ]; then
+          return 0
+        fi
+        info "Importing osu file/URL handler registry"
+        "$WINE" regedit /s "$OSU_HANDLER_REG" >/dev/null 2>&1 || {
+          err "Failed to import $OSU_HANDLER_REG"
+          return 1
+        }
+        touch "$MARKER_HANDLER_REG"
+      }
+
       ensure_prefix() {
         if [ -d "$WINEPREFIX_DIR" ] && [ -r "$WINEPREFIX_DIR/system.reg" ] && [ -w "$WINEPREFIX_DIR" ]; then
           ensure_prefix_tuned
+          ensure_handler_reg
           return 0
         fi
         info "Seeding wineprefix"
@@ -234,6 +253,7 @@ let
         cp -a --no-preserve=mode "$PREFIX_SEED"/. "$WINEPREFIX_DIR/"
         chmod -R u+rwX "$WINEPREFIX_DIR"
         ensure_prefix_tuned
+        ensure_handler_reg
       }
 
       ensure_gstreamer_dir() {
@@ -367,6 +387,61 @@ let
         "''${pre_args[@]}" "$WINE" "$wine_exe" "''${post_args[@]}"
       }
 
+      # Port of winello osuHandlerHandle: enter running yawl container when possible.
+      handle_osu_arg() {
+        local ARG="''${*:-}" OSUPID
+        local -a HANDLERRUN PRE_ARGS
+
+        if [ -x "$YAWL_BIN" ] && OSUPID="$(pgrep -n 'osu!.exe' 2>/dev/null || true)" && [ -n "$OSUPID" ]; then
+          HANDLERRUN=(
+            "$STEAM_RUN" env "YAWL_INSTALL_DIR=$YAWL_INSTALL_DIR" "YAWL_VERBS=enter=$OSUPID"
+            "$YAWL_BIN" "$OSU_HANDLER_BIN"
+          )
+          info "Opening via running osu! container (PID=$OSUPID)"
+        else
+          PRE_ARGS=()
+          if [ -n "''${PRE_LAUNCH_ARGS:-}" ]; then
+            # shellcheck disable=SC2206
+            read -r -a PRE_ARGS <<<"''${PRE_LAUNCH_ARGS}"
+          fi
+          ${optionalString useGameMode ''PRE_ARGS=("${gamemode}/bin/gamemoderun" "''${PRE_ARGS[@]}")''}
+          HANDLERRUN=("''${PRE_ARGS[@]}" "$WINE")
+          info "Opening with a new osu! instance"
+        fi
+
+        case "$ARG" in
+          osu://*)
+            info "Loading link ($ARG)"
+            cd "$HOME"
+            exec "''${HANDLERRUN[@]}" 'C:\windows\system32\start.exe' "$ARG"
+            ;;
+          *.osr | *.osz | *.osk | *.osz2)
+            local EXT="''${ARG##*.}" FULLARGPATH FILEDIR
+            FULLARGPATH="$(realpath "$ARG" 2>/dev/null || true)"
+            FULLARGPATH="''${FULLARGPATH:-$ARG}"
+            FILEDIR="$(realpath "$(dirname "$FULLARGPATH")" 2>/dev/null || true)"
+            if [ -n "''${FILEDIR:-}" ] && [ "$FILEDIR" != "/" ]; then
+              PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:$FILEDIR"
+              export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
+            fi
+            info "Loading file ($FULLARGPATH)"
+            cd "$HOME"
+            exec "''${HANDLERRUN[@]}" 'C:\windows\system32\start.exe' /ProgIDOpen "osustable.File.$EXT" "$FULLARGPATH"
+            ;;
+          *)
+            err "Unsupported osu! file or URL ($ARG)"
+            return 1
+            ;;
+        esac
+      }
+
+      is_osu_handler_arg() {
+        case "$1" in
+          osu://* | *.osr | *.osz | *.osk | *.osz2) return 0 ;;
+          *) return 1 ;;
+        esac
+      }
+
       prepare() {
         ensure_runtime
         ensure_prefix
@@ -381,6 +456,7 @@ let
         --help            Show this help
         --info            Show paths
         --download-osu    Re-download latest osu! installer bootstrap
+        --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
         --winecfg         Run winecfg
         --winetricks      Run winetricks
         --regedit         Run regedit
@@ -415,6 +491,13 @@ let
           info "Done. Run ${pname} to launch."
           exit 0
           ;;
+        --osuhandler)
+          prepare
+          ensure_osu
+          shift
+          [ -n "''${1:-}" ] || { err "Usage: ${pname} --osuhandler <file|osu://url>"; exit 1; }
+          handle_osu_arg "$@"
+          ;;
         --kill) prepare; "$WINESERVER" -k; exit 0 ;;
         --kill9) prepare; "$WINESERVER" -k9; exit 0 ;;
         --winecfg) prepare; exec "$WINE" winecfg ;;
@@ -441,7 +524,11 @@ let
         *)
           prepare
           ensure_osu
-          launch_osu "$@"
+          if is_osu_handler_arg "$1"; then
+            handle_osu_arg "$@"
+          else
+            launch_osu "$@"
+          fi
           ;;
       esac
     '';
@@ -449,18 +536,37 @@ let
 
   desktopItem = makeDesktopItem {
     name = pname;
-    exec = "${script}/bin/${pname} %U";
+    exec = "${script}/bin/${pname}";
     icon = "nix-osu-stable";
     comment = "osu!stable (yawl + wine-osu)";
     desktopName = "osu!(stable)";
     categories = [ "Game" ];
+  };
+
+  # NoDisplay handlers (winello-style): enter running instance instead of a new launch.
+  fileHandlerDesktop = makeDesktopItem {
+    name = "${pname}-file-handler";
+    exec = "${script}/bin/${pname} --osuhandler %f";
+    icon = "nix-osu-stable";
+    desktopName = "osu!(stable) file handler";
+    noDisplay = true;
+    startupNotify = true;
     mimeTypes = [
       "application/x-osu-skin-archive"
       "application/x-osu-replay"
       "application/x-osu-beatmap-archive"
       "application/x-osu-beatmap"
-      "x-scheme-handler/osu"
     ];
+  };
+
+  urlHandlerDesktop = makeDesktopItem {
+    name = "${pname}-url-handler";
+    exec = "${script}/bin/${pname} --osuhandler %u";
+    icon = "nix-osu-stable";
+    desktopName = "osu!(stable) URL handler";
+    noDisplay = true;
+    startupNotify = true;
+    mimeTypes = [ "x-scheme-handler/osu" ];
   };
 in
 symlinkJoin {
@@ -468,6 +574,8 @@ symlinkJoin {
   paths = [
     script
     desktopItem
+    fileHandlerDesktop
+    urlHandlerDesktop
     osu-mime
   ];
   passthru = {

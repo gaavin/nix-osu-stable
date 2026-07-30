@@ -28,6 +28,17 @@
     hash = "sha256-kn3mKfwpeTRScvxbH7jKbo+7zGDIozFkNVW8BmbayvQ=";
   };
 
+  # From winello stuff/: enter running yawl container for file/URL opens.
+  osuHandlerWine = {
+    url = "https://raw.githubusercontent.com/NelloKudo/osu-winello/main/stuff/osu-handler-wine";
+    hash = "sha256-NZH1Hr9FidaLOF7WZAVxVXKqNudjF0FuZtySQpQc69M=";
+  };
+
+  osuHandlerReg = {
+    url = "https://raw.githubusercontent.com/NelloKudo/osu-winello/main/stuff/osu-handler.reg";
+    hash = "sha256-7RIeoy1liSA64RJrI9Kesxyw9uDYGxIgWdEcXuEzjbs=";
+  };
+
   # Fetched at runtime (not a FOD) so users always get the current installer.
   osuInstall = {
     url = "https://m1.ppy.sh/r/osu!install.exe";
