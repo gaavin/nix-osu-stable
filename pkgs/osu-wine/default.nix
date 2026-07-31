@@ -121,8 +121,9 @@ let
         set +a
       fi
 
-      info() { echo -e '\033[1;34m'"nix-osu-stable:\033[0m $*"; }
-      err() { echo -e '\033[1;31m'"nix-osu-stable:\033[0m $*" >&2; }
+      # Use printf (not echo -e): Wine paths like O:\nix-... contain \n escapes.
+      info() { printf '\033[1;34mnix-osu-stable:\033[0m %s\n' "$*"; }
+      err() { printf '\033[1;31mnix-osu-stable:\033[0m %s\n' "$*" >&2; }
 
       write_tool_wrappers() {
         mkdir -p "$STATE_DIR"
@@ -387,14 +388,33 @@ let
         "''${pre_args[@]}" "$WINE" "$wine_exe" "''${post_args[@]}"
       }
 
+      # Copy import onto the O: game drive so osu!'s MoveFile is same-volume.
+      # Opening from Z:\…\Downloads often yields "Error moving file" under Wine.
+      stage_handler_file() {
+        local src="$1" base staged
+        [ -f "$src" ] || {
+          err "File not found: $src"
+          return 1
+        }
+        base="$(basename "$src")"
+        mkdir -p "$OSUPATH/.handler-import"
+        staged="$OSUPATH/.handler-import/$base"
+        cp -f "$src" "$staged"
+        # O: -> OSUPATH (see link_osu_drive)
+        printf 'O:\\.handler-import\\%s' "$base"
+      }
+
       # Port of winello osuHandlerHandle: enter running yawl container when possible.
+      # Do NOT wrap enter with steam-run — that nests userns and yawl fails with
+      # "reassociate to namespace 'ns/user' failed: Invalid argument".
       handle_osu_arg() {
         local ARG="''${*:-}" OSUPID
         local -a HANDLERRUN PRE_ARGS
 
         if [ -x "$YAWL_BIN" ] && OSUPID="$(pgrep -n 'osu!.exe' 2>/dev/null || true)" && [ -n "$OSUPID" ]; then
+          # Match winello: call yawl directly with enter=PID (already inside host ns).
           HANDLERRUN=(
-            "$STEAM_RUN" env "YAWL_INSTALL_DIR=$YAWL_INSTALL_DIR" "YAWL_VERBS=enter=$OSUPID"
+            env "YAWL_INSTALL_DIR=$YAWL_INSTALL_DIR" "YAWL_VERBS=enter=$OSUPID"
             "$YAWL_BIN" "$OSU_HANDLER_BIN"
           )
           info "Opening via running osu! container (PID=$OSUPID)"
@@ -405,6 +425,7 @@ let
             read -r -a PRE_ARGS <<<"''${PRE_LAUNCH_ARGS}"
           fi
           ${optionalString useGameMode ''PRE_ARGS=("${gamemode}/bin/gamemoderun" "''${PRE_ARGS[@]}")''}
+          # Fresh instance still uses the normal steam-run wine wrap.
           HANDLERRUN=("''${PRE_ARGS[@]}" "$WINE")
           info "Opening with a new osu! instance"
         fi
@@ -416,17 +437,13 @@ let
             exec "''${HANDLERRUN[@]}" 'C:\windows\system32\start.exe' "$ARG"
             ;;
           *.osr | *.osz | *.osk | *.osz2)
-            local EXT="''${ARG##*.}" FULLARGPATH FILEDIR
+            local EXT="''${ARG##*.}" FULLARGPATH WINEFILE
             FULLARGPATH="$(realpath "$ARG" 2>/dev/null || true)"
             FULLARGPATH="''${FULLARGPATH:-$ARG}"
-            FILEDIR="$(realpath "$(dirname "$FULLARGPATH")" 2>/dev/null || true)"
-            if [ -n "''${FILEDIR:-}" ] && [ "$FILEDIR" != "/" ]; then
-              PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:$FILEDIR"
-              export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
-            fi
-            info "Loading file ($FULLARGPATH)"
+            WINEFILE="$(stage_handler_file "$FULLARGPATH")" || return 1
+            info "Loading file ($FULLARGPATH -> $WINEFILE)"
             cd "$HOME"
-            exec "''${HANDLERRUN[@]}" 'C:\windows\system32\start.exe' /ProgIDOpen "osustable.File.$EXT" "$FULLARGPATH"
+            exec "''${HANDLERRUN[@]}" 'C:\windows\system32\start.exe' /ProgIDOpen "osustable.File.$EXT" "$WINEFILE"
             ;;
           *)
             err "Unsupported osu! file or URL ($ARG)"
