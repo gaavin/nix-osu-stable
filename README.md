@@ -138,10 +138,16 @@ osu-wine --devserver <host>
 Override the installer URL at runtime with `OSU_DOWNLOAD_URL=…` if needed.
 
 Discord Rich Presence is installed automatically into the wineprefix via
-[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) (same as winello). Use
-`--fixrpc` if presence stops working. If Discord itself is Flatpak, grant it
-access to the IPC socket (e.g. Flatseal: `xdg-run/discord-ipc-0`, plus
-Vesktop/Discord Flatpak xdg-run paths as documented by rpc-bridge).
+[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) (same as winello). The
+launcher bind-mounts host `discord-ipc-*` sockets into yawl’s pressure-vessel
+(so the bridge can reach Discord). Start Discord/Vesktop **before** osu!, and
+use `--fixrpc` if presence stops working.
+
+- **Vesktop**: enable *Discord Rich Presence* / arRPC in Vesktop settings so
+  `$XDG_RUNTIME_DIR/discord-ipc-0` exists.
+- **Flatpak Discord/Vesktop**: grant IPC filesystem access (Flatseal:
+  `xdg-run/discord-ipc-0`, plus Vesktop/Discord Flatpak xdg-run paths as
+  documented by rpc-bridge).
 
 ## Bumping versions
 

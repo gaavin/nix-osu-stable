@@ -153,6 +153,29 @@ let
         fi
       }
 
+      # pressure-vessel filters $XDG_RUNTIME_DIR to Wayland/Pulse/etc. Host
+      # discord-ipc-* sockets are invisible unless bind-mounted individually
+      # (mounting the whole runtime dir breaks wayland-* symlinks).
+      append_discord_ipc_mounts() {
+        local runtime dir sock found=0
+        runtime="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+        for dir in \
+          "$runtime" \
+          "$runtime/app/com.discordapp.Discord" \
+          "$runtime/.flatpak/dev.vencord.Vesktop/xdg-run" \
+          "$runtime/.flatpak/com.discordapp.Discord/xdg-run" \
+          "$runtime/snap.discord" \
+          "$runtime/snap.discord-canary"; do
+          for sock in "$dir"/discord-ipc-*; do
+            if [ -S "$sock" ]; then
+              PRESSURE_VESSEL_FILESYSTEMS_RW+=":$sock"
+              found=1
+            fi
+          done
+        done
+        [ "$found" -eq 1 ]
+      }
+
       ensure_runtime() {
         ensure_yawl_configs
         write_tool_wrappers
@@ -162,6 +185,7 @@ let
           p="$(df -P "$1" 2>/dev/null | tail -1)" || return 0
           [ -n "$p" ] && echo -n "''${p##* }:"
         }
+
         PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}"
         PRESSURE_VESSEL_FILESYSTEMS_RW+="$(_mount_of "$STATE_DIR")"
         PRESSURE_VESSEL_FILESYSTEMS_RW+="$(_mount_of "$HOME")"
@@ -170,6 +194,7 @@ let
           PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH")"
           [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
         fi
+        append_discord_ipc_mounts || true
         export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
 
         if [ -f "$WINE_OSU/lib/wine/x86_64-unix/libgstfaad.so" ]; then
@@ -422,6 +447,10 @@ let
         mkdir -p "$OSUPATH"
         PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:$(realpath "$OSUPATH")"
         [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
+        # Remount Discord IPC in case Discord started after prepare().
+        if ! append_discord_ipc_mounts; then
+          info "No Discord IPC socket found (start Discord/Vesktop with Rich Presence before launching)"
+        fi
         export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
 
         wine_exe="$(unix_to_wine_path "$osu_exe")"
