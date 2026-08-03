@@ -1,38 +1,40 @@
 # nix-osu-stable
 
-**osu!stable on NixOS**, using the same dependency stack as [osu-winello](https://github.com/NelloKudo/osu-winello):
+**osu!stable on NixOS**, using the same stack as [osu-winello](https://github.com/NelloKudo/osu-winello):
 
-- [wine-osu](https://github.com/NelloKudo/WineBuilder) (Wine built for osu!)
-- [yawl](https://github.com/whrvt/yawl) (Steam Runtime / pressure-vessel)
+- [wine-osu](https://github.com/NelloKudo/WineBuilder) — Wine built for osu!
+- [yawl](https://github.com/whrvt/yawl) — Steam Runtime / pressure-vessel
 - a ready-made wineprefix
 - desktop / file associations (`.osz`, `.osk`, `.osr`, `osu://`)
 
-This is **not** a wrapper around `osu-winello.sh`. It’s a normal Nix flake you wire into Home Manager.
+This is a normal Nix flake (Home Manager module included), **not** a wrapper around
+`osu-winello.sh`.
 
-> **Requirements:** `x86_64-linux`, Nix flakes, and enough disk for the Steam Runtime on first run (can be a few hundred MB).
+> **Needs:** `x86_64-linux`, flakes, and a few hundred MB of disk for the Steam
+> Runtime on first launch.
 
 ---
 
-## Try it once (no install)
+## 1. Try it (optional)
+
+No flake changes — just run:
 
 ```bash
 nix run github:gaavin/nix-osu-stable
 ```
 
-That downloads wine-osu, sets up yawl, seeds a wineprefix under
-`~/.local/share/nix-osu-stable/`, and fetches the latest osu! installer.
-First launch takes a while. After that, use the same command again, or install
-properly with Home Manager (below) so you get a desktop entry and `osu-wine` on
-your PATH.
+First launch downloads wine-osu, the Steam Runtime, and the osu! installer into
+`~/.local/share/nix-osu-stable/`. For a permanent install with a desktop entry,
+use Home Manager below.
 
 ---
 
-## Install with Home Manager (recommended)
+## 2. Install with Home Manager
 
-These snippets match a real NixOS + Home Manager flake setup (NixOS module
-imports HM, then HM imports this flake’s module).
+These steps match a typical NixOS + Home Manager flake (system flake imports HM,
+HM imports this module).
 
-### 1. Add the flake input
+### Add the flake input
 
 In your system `flake.nix`:
 
@@ -50,8 +52,6 @@ In your system `flake.nix`:
       url = "github:gaavin/nix-osu-stable";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    # ...your other inputs...
   };
 
   outputs =
@@ -72,7 +72,6 @@ In your system `flake.nix`:
             home-manager = {
               useGlobalPkgs = true;
               useUserPackages = true;
-              # Pass the flake into home.nix:
               extraSpecialArgs = { inherit nix-osu-stable; };
               users.YOUR_USERNAME = import ./home.nix;
             };
@@ -83,7 +82,7 @@ In your system `flake.nix`:
 }
 ```
 
-### 2. Enable it in `home.nix`
+### Enable the module in `home.nix`
 
 ```nix
 { nix-osu-stable, ... }:
@@ -94,77 +93,160 @@ In your system `flake.nix`:
   programs.osu-stable = {
     enable = true;
 
-    # Optional — example from a real desktop config (Wacom / tablet fix):
+    # Optional tablet fix (OpenTabletDriver Absolute + Wayland):
     # environment.WINE_ENABLE_ABS_TABLET_HACK = "2";
 
-    # Optional extras:
+    # Optional:
     # location = "${config.xdg.dataHome}/nix-osu-stable";
-    # gamemode = false;          # default; keep off unless you know you need it
-    # arrpc = true;              # default; helps Discord Rich Presence
+    # gamemode = false;   # default; keep off unless you know you need it
+    # arrpc = true;       # default; helps Discord Rich Presence
     # preLaunchArgs = "mangohud";
     # postLaunchArgs = "-devserver akatsuki.gg";
   };
 }
 ```
 
-### 3. Rebuild
+The flake’s Home Manager module defaults `package` to this flake’s `osu-wine`.
+You do **not** need to set `package` yourself.
+
+### Rebuild and launch
 
 ```bash
-# update the flake input (first time / when you want a new nix-osu-stable)
 nix flake update nix-osu-stable
-
-# NixOS + HM in one flake:
 sudo nixos-rebuild switch --flake .#YOUR_HOSTNAME
-```
 
-You should now have:
-
-- `osu-wine` on your PATH
-- an **osu!(stable)** app in your app menu
-- handlers for beatmaps / skins / replays / `osu://` links
-
-### 4. Launch
-
-Open **osu!(stable)** from the menu, or:
-
-```bash
 osu-wine
+# or open “osu!(stable)” from your app menu
 ```
 
-First run downloads the Steam Runtime (big) and the osu! installer, then the
-client updates itself. Later launches are much faster.
+First run:
+
+1. Verifies / downloads the Steam Runtime via yawl (can be large)
+2. Seeds the wineprefix
+3. Downloads the latest osu! installer from ppy
+4. Lets the client self-update
+
+Later launches are much faster. You get `osu-wine` on PATH, a desktop entry, and
+handlers for beatmaps / skins / replays / `osu://` links.
 
 ---
 
-## Discord Rich Presence (optional)
+## 3. Set your audio offset (do this)
 
-osu! under Wine can’t talk to Discord by itself. This package installs
-[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) automatically and mounts
-Discord’s IPC socket into the Steam Runtime.
+Wine adds a bit of audio delay. **Set a global offset in osu!** or hits will feel
+late even when your system latency is fine.
 
-**Easiest with Vesktop** — turn on built-in arRPC:
+Same guidance as [osu-winello](https://github.com/NelloKudo/osu-winello):
+
+| Mode | Suggested global offset |
+| --- | --- |
+| Normal | **−40 ms** to **−35 ms** |
+| Audio compatibility mode | **−25 ms** |
+
+In-game: **Options → Audio → Offset**. Watch the hit error meter and fine-tune —
+every setup differs slightly.
+
+---
+
+## 4. Optional: lower system audio latency
+
+PipeWire on NixOS defaults are fine for desktop use but soft for rhythm games.
+A locked low quantum cuts buffer delay (example below ≈ **2.7 ms** at 128/48000).
+
+Add something like this to your **NixOS** `configuration.nix` (not Home Manager),
+then rebuild:
+
+```nix
+{
+  services.pipewire = {
+    enable = true;
+    pulse.enable = true;
+    extraConfig.pipewire."92-low-latency" = {
+      "context.properties" = {
+        "default.clock.rate" = 48000;
+        "default.clock.quantum" = 128;
+        "default.clock.min-quantum" = 128;
+        "default.clock.max-quantum" = 128;
+      };
+    };
+    extraConfig.pipewire-pulse."92-low-latency" = {
+      "pulse.properties" = {
+        "pulse.min.req" = "128/48000";
+        "pulse.default.req" = "128/48000";
+        "pulse.max.req" = "128/48000";
+        "pulse.min.quantum" = "128/48000";
+        "pulse.max.quantum" = "128/48000";
+      };
+      "stream.properties" = {
+        "node.latency" = "128/48000";
+        "resample.quality" = 1;
+      };
+    };
+  };
+
+  # Lets PipeWire take realtime priority
+  security.rtkit.enable = true;
+
+  # Optional: extra headroom if your user is in the `audio` group
+  security.pam.loginLimits = [
+    {
+      domain = "@audio";
+      type = "-";
+      item = "rtprio";
+      value = "95";
+    }
+    {
+      domain = "@audio";
+      type = "-";
+      item = "memlock";
+      value = "unlimited";
+    }
+  ];
+  # users.users.YOUR_USERNAME.extraGroups = [ "wheel" "audio" ];
+}
+```
+
+After `nixos-rebuild switch`, restart PipeWire (or log out/in), launch osu!, and
+**re-check your offset** — lower latency can change how the old offset feels.
+
+Notes:
+
+- If you hear crackling, try a larger quantum (e.g. `256` instead of `128`) in
+  every place above.
+- A low-latency / preemptible kernel (e.g. CachyOS via Chaotic Nyx) and
+  `boot.kernelParams = [ "preempt=full" ];` can help further, but PipeWire +
+  offset matter more for most people.
+- More general tuning: [osu-winello wiki — Optimizing performance](https://github.com/NelloKudo/osu-winello/wiki/Optimizing:-osu!-performance).
+
+---
+
+## 5. Optional: Discord Rich Presence
+
+osu! under Wine can’t reach Discord alone. This package installs
+[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) and mounts Discord IPC into
+the Steam Runtime.
+
+**With Vesktop** — enable built-in arRPC:
 
 ```nix
 programs.vesktop = {
   enable = true;
-  settings.arRPC = true;   # creates $XDG_RUNTIME_DIR/discord-ipc-0
+  settings.arRPC = true;
 };
 ```
 
-**Or** leave `programs.osu-stable.arrpc = true` (default). The launcher starts
-[OpenAsar arrpc](https://github.com/OpenAsar/arrpc) if no IPC socket exists.
-With Vesktop + standalone arrpc, also enable the Vencord plugin
-**WebRichPresence (arRPC)** so Vesktop shows the activity.
-
-Tips:
+**Or** keep `programs.osu-stable.arrpc = true` (default). The launcher starts
+[OpenAsar arrpc](https://github.com/OpenAsar/arrpc) if no `discord-ipc-*` socket
+exists. With Vesktop + standalone arrpc, also enable the Vencord plugin
+**WebRichPresence (arRPC)**.
 
 - Start Discord/Vesktop, then osu! (or restart osu! after Discord is up).
-- If presence breaks after an update: `osu-wine --fixrpc`
-- Flatpak Discord needs extra IPC permissions (see [rpc-bridge](https://github.com/EnderIce2/rpc-bridge)).
+- Broken after an update? `osu-wine --fixrpc`
+- Flatpak Discord needs extra IPC permissions ([rpc-bridge docs](https://github.com/EnderIce2/rpc-bridge)).
 
 ---
 
-## Everyday commands
+## 6. Day-to-day use
 
 | Command | What it does |
 | --- | --- |
@@ -178,56 +260,50 @@ Tips:
 | `osu-wine --winecfg` | Wine settings |
 | `osu-wine --winetricks …` | winetricks in this prefix |
 
-Opening a `.osz` / `.osk` / `.osr` or an `osu://` link reuses the running game
-when possible (enters the existing yawl container instead of starting a second
+Opening a `.osz` / `.osk` / `.osr` or an `osu://` link reuses the **already
+running** game when possible (enters the yawl container instead of a second
 window).
 
----
-
-## Where files live
-
-Default state dir: `~/.local/share/nix-osu-stable/`
+### Where files live
 
 ```
 ~/.local/share/nix-osu-stable/
   yawl/          # Steam Runtime + yawl configs
-  wineprefix/    # Wine prefix (seeded, then used by the game)
+  wineprefix/    # Wine prefix
   osu/           # osu!.exe, Songs, Skins, …
   logs/          # e.g. arrpc.log
 ```
 
-Nix owns tool versions. There is no `osu-wine --update` for wine-osu — bump
-pins in [`versions.nix`](./versions.nix) (or wait for this flake to bump them).
-
-The osu! **client** itself is not pinned: the launcher downloads the current
-installer from ppy on first run.
+Nix owns wine-osu / yawl versions (bump [`versions.nix`](./versions.nix) or wait
+for this flake). The osu! **client** is not pinned — first run always fetches
+the current installer from ppy.
 
 ---
 
-## Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Try this |
 | --- | --- |
-| First launch hangs / huge download | Normal — yawl is fetching the Steam Runtime. Needs network. |
-| Game won’t start after a flake update | `osu-wine --kill`, then launch again. |
-| Discord doesn’t show osu! | Enable Vesktop `settings.arRPC = true` (or arrpc + WebRichPresence), start Discord first, then `osu-wine --fixrpc` and relaunch. |
-| “Runtime Platform missing” | `osu-wine --kill`; delete `~/.local/share/nix-osu-stable/yawl/.runtime-ready` and launch again to re-verify. |
-| Maps / skins open a second osu! | Update to a current nix-osu-stable; file opens should enter the running instance. |
-| Want a clean slate | Quit osu!, then move/remove `~/.local/share/nix-osu-stable/` (you will re-download the game). |
+| Hits feel late | Set global offset (−40/−35 ms, or −25 ms in audio compatibility mode). |
+| Audio crackling after low-latency PipeWire | Raise quantum to `256` (or higher) and rebuild. |
+| First launch hangs / huge download | Normal — Steam Runtime fetch. Needs network. |
+| Won’t start after a flake update | `osu-wine --kill`, then launch again. |
+| No Discord presence | Vesktop `settings.arRPC = true` (or arrpc + WebRichPresence), Discord first, then `osu-wine --fixrpc`. |
+| “Runtime Platform missing” | `osu-wine --kill`; remove `~/.local/share/nix-osu-stable/yawl/.runtime-ready`; launch again. |
+| Maps open a second osu! | Update nix-osu-stable; handlers should enter the running instance. |
+| Clean slate | Quit osu!, move/remove `~/.local/share/nix-osu-stable/` (re-downloads the game). |
 
 ---
 
-## Package-only install (no HM module)
+## Advanced
+
+### Package-only (no Home Manager module)
 
 ```nix
-# flake input: github:gaavin/nix-osu-stable  (same as above)
-
 home.packages = [
   inputs.nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine
 ];
 ```
-
-Override example:
 
 ```nix
 inputs.nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine.override {
@@ -243,23 +319,21 @@ inputs.nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine.overr
 | Attribute | What it is |
 | --- | --- |
 | `osu-wine` (default) | Launcher + desktop entries + mime handlers |
-| `wine-osu` | WineBuilder wine-osu binaries |
+| `wine-osu` | WineBuilder binaries |
 | `yawl` | Steam Runtime wine launcher |
 | `osu-wineprefix` | Prebuilt prefix seed |
-| `osu-mime` | MIME types, icon, osu-handler-wine |
+| `osu-mime` | MIME types, icon, handler |
 | `rpc-bridge` | Discord RPC bridge binary |
 
 ```bash
 nix build github:gaavin/nix-osu-stable#osu-wine
 ```
 
----
+### Bumping versions (maintainers)
 
-## Bumping versions (maintainers)
-
-Edit [`versions.nix`](./versions.nix) to match current
-[osu-winello.sh](https://github.com/NelloKudo/osu-winello/blob/main/osu-winello.sh)
-wine / yawl / bin URLs, then refresh hashes:
+Edit [`versions.nix`](./versions.nix) to match
+[osu-winello.sh](https://github.com/NelloKudo/osu-winello/blob/main/osu-winello.sh),
+then:
 
 ```bash
 nix flake prefetch <url>
@@ -271,8 +345,8 @@ nix-prefetch-url --type sha256 <url> | xargs nix hash convert --hash-algo sha256
 
 ## Credits
 
-- [NelloKudo/osu-winello](https://github.com/NelloKudo/osu-winello) — versions, yawl setup, prefix, defaults
-- [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — hand off files/URLs into a running Wine osu!
+- [NelloKudo/osu-winello](https://github.com/NelloKudo/osu-winello) — versions, yawl setup, prefix, defaults, offset guidance
+- [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — file/URL handoff into a running Wine osu!
 - [EnderIce2/rpc-bridge](https://github.com/EnderIce2/rpc-bridge) — Discord Rich Presence under Wine
 - [OpenAsar/arrpc](https://github.com/OpenAsar/arrpc) — Discord IPC for atypical clients
 - [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu builds
