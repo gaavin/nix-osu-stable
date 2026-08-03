@@ -1,6 +1,6 @@
 # nix-osu-stable
 
-**osu!stable on NixOS**, packaged the same way [osu-winello](https://github.com/NelloKudo/osu-winello) does it on other distros:
+**osu!stable on NixOS**, using the same dependency stack as [osu-winello](https://github.com/NelloKudo/osu-winello):
 
 - [wine-osu](https://github.com/NelloKudo/WineBuilder) (Wine built for osu!)
 - [yawl](https://github.com/whrvt/yawl) (Steam Runtime / pressure-vessel)
