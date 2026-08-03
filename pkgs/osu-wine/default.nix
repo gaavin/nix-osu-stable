@@ -8,6 +8,7 @@
   yawl,
   osu-wineprefix,
   osu-mime,
+  rpc-bridge,
   winetricks,
   steam-run,
   coreutils,
@@ -109,10 +110,14 @@ let
       OSU_HANDLER_BIN="${osu-mime}/bin/osu-handler-wine"
       OSU_HANDLER_REG="${osu-mime}/share/nix-osu-stable/osu-handler.reg"
       MARKER_HANDLER_REG="$WINEPREFIX_DIR/.nix-osu-stable-handler-reg"
+      RPC_BRIDGE_EXE="${rpc-bridge}/bridge.exe"
+      MARKER_RPC_BRIDGE="$WINEPREFIX_DIR/.nix-osu-stable-rpc-bridge"
 
       export YAWL_INSTALL_DIR
       export WINEPREFIX="$WINEPREFIX_DIR"
       export WINE_INSTALL_PATH="$WINE_OSU"
+      # rpc-bridge reads XDG_RUNTIME_DIR for discord-ipc-* (falls back to /run/user/1000).
+      export XDG_RUNTIME_DIR="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 
       if [ -r "$CONFIG_FILE" ]; then
         set -a
@@ -236,6 +241,45 @@ let
           return 1
         }
         touch "$MARKER_HANDLER_REG"
+      }
+
+      # Port of winello discordRpc(): install EnderIce2/rpc-bridge as a Wine service.
+      ensure_discord_rpc() {
+        local force="''${1:-}"
+        if [ "$force" != "force" ] \
+          && [ -f "$MARKER_RPC_BRIDGE" ] \
+          && [ -f "$WINEPREFIX_DIR/drive_c/windows/bridge.exe" ]; then
+          return 0
+        fi
+
+        [ -s "$RPC_BRIDGE_EXE" ] || {
+          err "Missing packaged rpc-bridge at $RPC_BRIDGE_EXE"
+          return 1
+        }
+
+        info "Installing Discord RPC bridge (rpc-bridge)"
+        # Clear a stale service entry before reinstall (winello does the same).
+        "$WINE" reg delete 'HKEY_LOCAL_MACHINE\System\CurrentControlSet\Services\rpc-bridge' /f \
+          >/dev/null 2>&1 || true
+
+        # Stage under STATE_DIR so pressure-vessel can always see the binary.
+        local staged_dir staged bridge_wine
+        staged_dir="$STATE_DIR/.rpc-bridge-install"
+        staged="$staged_dir/bridge.exe"
+        mkdir -p "$staged_dir"
+        cp -f "$RPC_BRIDGE_EXE" "$staged"
+        chmod u+rx "$staged"
+        bridge_wine="$(unix_to_wine_path "$staged")"
+        if ! "$WINE" "$bridge_wine" --install; then
+          err "rpc-bridge --install failed"
+          return 1
+        fi
+        if [ ! -f "$WINEPREFIX_DIR/drive_c/windows/bridge.exe" ]; then
+          err "rpc-bridge install did not create drive_c/windows/bridge.exe"
+          return 1
+        fi
+        touch "$MARKER_RPC_BRIDGE"
+        info "Discord RPC bridge ready"
       }
 
       ensure_prefix() {
@@ -463,6 +507,7 @@ let
         ensure_runtime
         ensure_prefix
         ensure_gstreamer_dir
+        ensure_discord_rpc
       }
 
       usage() {
@@ -474,6 +519,7 @@ let
         --info            Show paths
         --download-osu    Re-download latest osu! installer bootstrap
         --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
+        --fixrpc          Reinstall Discord Rich Presence bridge (rpc-bridge)
         --winecfg         Run winecfg
         --winetricks      Run winetricks
         --regedit         Run regedit
@@ -506,6 +552,15 @@ let
           prepare
           ensure_osu force
           info "Done. Run ${pname} to launch."
+          exit 0
+          ;;
+        --fixrpc)
+          ensure_runtime
+          ensure_prefix
+          ensure_gstreamer_dir
+          rm -f "$MARKER_RPC_BRIDGE"
+          ensure_discord_rpc force
+          info "Discord RPC bridge reinstalled."
           exit 0
           ;;
         --osuhandler)
@@ -596,7 +651,12 @@ symlinkJoin {
     osu-mime
   ];
   passthru = {
-    inherit wine-osu yawl osu-wineprefix;
+    inherit
+      wine-osu
+      yawl
+      osu-wineprefix
+      rpc-bridge
+      ;
     envConfig = resolvedConfig;
     inherit osuDownloadUrl;
   };

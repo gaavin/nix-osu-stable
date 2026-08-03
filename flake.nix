@@ -20,6 +20,7 @@
         yawl = pkgs.callPackage ./pkgs/yawl { inherit versions; };
         osu-wineprefix = pkgs.callPackage ./pkgs/osu-wineprefix { inherit versions; };
         osu-mime = pkgs.callPackage ./pkgs/osu-mime { inherit versions; };
+        rpc-bridge = pkgs.callPackage ./pkgs/rpc-bridge { inherit versions; };
         osu-wine = pkgs.callPackage ./pkgs/osu-wine {
           inherit
             versions
@@ -27,6 +28,7 @@
             yawl
             osu-wineprefix
             osu-mime
+            rpc-bridge
             ;
         };
         default = osu-wine;
@@ -49,6 +51,7 @@
           yawl
           osu-wineprefix
           osu-mime
+          rpc-bridge
           osu-wine
           ;
       };

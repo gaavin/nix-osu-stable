@@ -72,6 +72,7 @@ The module generates a store env file sourced at launch and refreshes yawl wine
 | `yawl` | Steam-runtime wine launcher |
 | `osu-wineprefix` | Prebuilt prefix seed |
 | `osu-mime` | File associations, icon, osu-handler-wine |
+| `rpc-bridge` | Discord Rich Presence bridge for Wine |
 
 ```bash
 nix build .#wine-osu
@@ -125,6 +126,7 @@ osu-wine --help
 osu-wine --info
 osu-wine --download-osu  # re-fetch latest installer bootstrap
 osu-wine --osuhandler <file|osu://url>  # open map/skin/replay/link (reuse instance)
+osu-wine --fixrpc         # reinstall Discord Rich Presence bridge
 osu-wine --winecfg
 osu-wine --winetricks [args]
 osu-wine --regedit
@@ -134,6 +136,12 @@ osu-wine --devserver <host>
 ```
 
 Override the installer URL at runtime with `OSU_DOWNLOAD_URL=…` if needed.
+
+Discord Rich Presence is installed automatically into the wineprefix via
+[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) (same as winello). Use
+`--fixrpc` if presence stops working. If Discord itself is Flatpak, grant it
+access to the IPC socket (e.g. Flatseal: `xdg-run/discord-ipc-0`, plus
+Vesktop/Discord Flatpak xdg-run paths as documented by rpc-bridge).
 
 ## Bumping versions
 
@@ -153,6 +161,7 @@ The osu! installer itself is **not** hashed — it is downloaded at launch time.
 
 - [NelloKudo/osu-winello](https://github.com/NelloKudo/osu-winello) — reference for versions, yawl setup, prefix, and defaults
 - [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — file/URL handoff into a running Wine osu!
+- [EnderIce2/rpc-bridge](https://github.com/EnderIce2/rpc-bridge) — Discord Rich Presence under Wine
 - [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu builds
 - [whrvt/yawl](https://github.com/whrvt/yawl) — Steam Runtime wine launcher
 - [fufexan/nix-gaming](https://github.com/fufexan/nix-gaming) `osu-stable` — first-run installer pattern

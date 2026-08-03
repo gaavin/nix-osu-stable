@@ -43,4 +43,11 @@
   osuInstall = {
     url = "https://m1.ppy.sh/r/osu!install.exe";
   };
+
+  # Discord Rich Presence bridge for Wine (EnderIce2/rpc-bridge; winello DISCRPCBRIDGEVERSION).
+  rpcBridge = {
+    version = "1.4.1.3";
+    url = "https://github.com/EnderIce2/rpc-bridge/releases/download/v1.4.1.3/bridge.zip";
+    hash = "sha256-LjSLhRtUqZtuBiKJvbH1vEyG78se8rPnSO4p8P3RQ+c=";
+  };
 }
