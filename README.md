@@ -104,7 +104,7 @@ In your system `flake.nix`:
 
     # Optional extras:
     # location = "${config.xdg.dataHome}/nix-osu-stable";
-    # gamemode = false;          # keep off unless you know you need it
+    # gamemode = false;          # default; keep off unless you know you need it
     # arrpc = true;              # default; helps Discord Rich Presence
     # preLaunchArgs = "mangohud";
     # postLaunchArgs = "-devserver akatsuki.gg";
