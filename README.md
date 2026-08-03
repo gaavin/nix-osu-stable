@@ -186,23 +186,6 @@ then rebuild:
 
   # Lets PipeWire take realtime priority
   security.rtkit.enable = true;
-
-  # Optional: extra headroom if your user is in the `audio` group
-  security.pam.loginLimits = [
-    {
-      domain = "@audio";
-      type = "-";
-      item = "rtprio";
-      value = "95";
-    }
-    {
-      domain = "@audio";
-      type = "-";
-      item = "memlock";
-      value = "unlimited";
-    }
-  ];
-  # users.users.YOUR_USERNAME.extraGroups = [ "wheel" "audio" ];
 }
 ```
 
