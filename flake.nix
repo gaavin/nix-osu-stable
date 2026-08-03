@@ -42,7 +42,15 @@
         program = "${packages.osu-wine}/bin/osu-wine";
       };
 
-      homeModules.osu-stable = ./modules/home-manager/osu-stable.nix;
+      homeModules.osu-stable =
+        { lib, pkgs, ... }:
+        {
+          imports = [ ./modules/home-manager/osu-stable.nix ];
+          # Default to this flake's osu-wine; users can still override.
+          programs.osu-stable.package = lib.mkDefault (
+            self.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine
+          );
+        };
       homeModules.default = self.homeModules.osu-stable;
 
       overlays.default = final: _prev: {

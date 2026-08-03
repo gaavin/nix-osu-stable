@@ -26,8 +26,13 @@ in
     package = mkOption {
       type = types.nullOr types.package;
       default = null;
-      example = literalExpression "inputs.nix-osu-stable.packages.\${pkgs.system}.osu-wine";
-      description = "osu-wine package from nix-osu-stable (required when enable is true).";
+      defaultText = literalExpression "nix-osu-stable.packages.\${pkgs.stdenv.hostPlatform.system}.osu-wine";
+      example = literalExpression "nix-osu-stable.packages.\${pkgs.stdenv.hostPlatform.system}.osu-wine";
+      description = ''
+        osu-wine package to install. When you import
+        `nix-osu-stable.homeModules.osu-stable` from the flake, this defaults
+        to that flake's `osu-wine` — you usually do not need to set it.
+      '';
     };
 
     location = mkOption {
@@ -121,7 +126,11 @@ in
       assertions = [
         {
           assertion = cfg.package != null;
-          message = "programs.osu-stable.package must be set (pass nix-osu-stable.packages.\${system}.osu-wine).";
+          message = ''
+            programs.osu-stable.package is unset. Import nix-osu-stable.homeModules.osu-stable
+            from the flake (which sets a default), or set package explicitly to
+            nix-osu-stable.packages.''${pkgs.stdenv.hostPlatform.system}.osu-wine.
+          '';
         }
       ];
 

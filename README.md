@@ -86,18 +86,13 @@ In your system `flake.nix`:
 ### 2. Enable it in `home.nix`
 
 ```nix
-{
-  pkgs,
-  nix-osu-stable,
-  ...
-}:
+{ nix-osu-stable, ... }:
 
 {
   imports = [ nix-osu-stable.homeModules.osu-stable ];
 
   programs.osu-stable = {
     enable = true;
-    package = nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine;
 
     # Optional — example from a real desktop config (Wacom / tablet fix):
     # environment.WINE_ENABLE_ABS_TABLET_HACK = "2";
