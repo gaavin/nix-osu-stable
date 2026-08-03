@@ -9,6 +9,7 @@
   osu-wineprefix,
   osu-mime,
   rpc-bridge,
+  arrpc,
   winetricks,
   steam-run,
   coreutils,
@@ -27,6 +28,9 @@
   pname ? "osu-wine",
   location ? "$HOME/.local/share/nix-osu-stable",
   useGameMode ? false,
+  # Start OpenAsar arrpc when no discord-ipc-* socket exists (needed for Vesktop
+  # without built-in arRPC, and atypical Discord setups).
+  useArrpc ? true,
   # Path to a shell-sourceable env file (HM generates one; package ships a default).
   configFile ? null,
   environment ? { },
@@ -86,7 +90,8 @@ let
       winetricks
       steam-run
     ]
-    ++ optional useGameMode gamemode;
+    ++ optional useGameMode gamemode
+    ++ optional useArrpc arrpc;
 
     text = ''
       set -euo pipefail
@@ -112,6 +117,9 @@ let
       MARKER_HANDLER_REG="$WINEPREFIX_DIR/.nix-osu-stable-handler-reg"
       RPC_BRIDGE_EXE="${rpc-bridge}/bridge.exe"
       MARKER_RPC_BRIDGE="$WINEPREFIX_DIR/.nix-osu-stable-rpc-bridge"
+      ARRPC_BIN="${optionalString useArrpc "${arrpc}/bin/arrpc"}"
+      ARRPC_LOG="$STATE_DIR/logs/arrpc.log"
+      ARRPC_PIDFILE="$STATE_DIR/logs/arrpc.pid"
 
       export YAWL_INSTALL_DIR
       export WINEPREFIX="$WINEPREFIX_DIR"
@@ -156,24 +164,86 @@ let
       # pressure-vessel filters $XDG_RUNTIME_DIR to Wayland/Pulse/etc. Host
       # discord-ipc-* sockets are invisible unless bind-mounted individually
       # (mounting the whole runtime dir breaks wayland-* symlinks).
-      append_discord_ipc_mounts() {
-        local runtime dir sock found=0
+      discord_ipc_dirs() {
+        local runtime
         runtime="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-        for dir in \
+        printf '%s\n' \
           "$runtime" \
           "$runtime/app/com.discordapp.Discord" \
           "$runtime/.flatpak/dev.vencord.Vesktop/xdg-run" \
           "$runtime/.flatpak/com.discordapp.Discord/xdg-run" \
           "$runtime/snap.discord" \
-          "$runtime/snap.discord-canary"; do
+          "$runtime/snap.discord-canary"
+      }
+
+      has_discord_ipc() {
+        local dir sock
+        while IFS= read -r dir; do
+          for sock in "$dir"/discord-ipc-*; do
+            [ -S "$sock" ] && return 0
+          done
+        done < <(discord_ipc_dirs)
+        return 1
+      }
+
+      append_discord_ipc_mounts() {
+        local dir sock found=0
+        while IFS= read -r dir; do
           for sock in "$dir"/discord-ipc-*; do
             if [ -S "$sock" ]; then
               PRESSURE_VESSEL_FILESYSTEMS_RW+=":$sock"
               found=1
             fi
           done
-        done
+        done < <(discord_ipc_dirs)
         [ "$found" -eq 1 ]
+      }
+
+      refresh_discord_ipc_mounts() {
+        append_discord_ipc_mounts || true
+        export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
+      }
+
+      # OpenAsar arrpc provides discord-ipc-* when Discord/Vesktop arRPC is absent.
+      ensure_arrpc() {
+        if has_discord_ipc; then
+          return 0
+        fi
+        if [ -z "$ARRPC_BIN" ] || [ ! -x "$ARRPC_BIN" ]; then
+          info "No Discord IPC socket found (enable Vesktop Rich Presence/arRPC, or install arrpc)"
+          return 0
+        fi
+
+        mkdir -p "$(dirname "$ARRPC_LOG")"
+        if [ -f "$ARRPC_PIDFILE" ]; then
+          local old
+          old="$(cat "$ARRPC_PIDFILE" 2>/dev/null || true)"
+          if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then
+            :
+          else
+            rm -f "$ARRPC_PIDFILE"
+          fi
+        fi
+
+        if ! has_discord_ipc; then
+          # Prefer an already-running arrpc (e.g. systemd --user services.arrpc).
+          if ! pgrep -x arrpc >/dev/null 2>&1; then
+            info "Starting arrpc for Discord Rich Presence"
+            "$ARRPC_BIN" >>"$ARRPC_LOG" 2>&1 &
+            echo $! >"$ARRPC_PIDFILE"
+          fi
+          local n=0
+          while [ "$n" -lt 50 ]; do
+            has_discord_ipc && break
+            sleep 0.1
+            n=$((n + 1))
+          done
+        fi
+
+        if ! has_discord_ipc; then
+          err "arrpc did not create a discord-ipc socket (see $ARRPC_LOG)"
+          return 1
+        fi
       }
 
       ensure_runtime() {
@@ -194,6 +264,7 @@ let
           PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH")"
           [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
         fi
+        # arrpc/Discord may not be up yet; mounts refreshed again after ensure_arrpc.
         append_discord_ipc_mounts || true
         export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
 
@@ -447,9 +518,9 @@ let
         mkdir -p "$OSUPATH"
         PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}:$(realpath "$OSUPATH")"
         [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
-        # Remount Discord IPC in case Discord started after prepare().
+        ensure_arrpc
         if ! append_discord_ipc_mounts; then
-          info "No Discord IPC socket found (start Discord/Vesktop with Rich Presence before launching)"
+          info "No Discord IPC socket found (Rich Presence unavailable this launch)"
         fi
         export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
 
@@ -534,6 +605,9 @@ let
 
       prepare() {
         ensure_runtime
+        # Create discord-ipc before any long-lived wine/yawl so mounts apply.
+        ensure_arrpc
+        refresh_discord_ipc_mounts
         ensure_prefix
         ensure_gstreamer_dir
         ensure_discord_rpc
@@ -585,6 +659,8 @@ let
           ;;
         --fixrpc)
           ensure_runtime
+          ensure_arrpc
+          refresh_discord_ipc_mounts
           ensure_prefix
           ensure_gstreamer_dir
           rm -f "$MARKER_RPC_BRIDGE"

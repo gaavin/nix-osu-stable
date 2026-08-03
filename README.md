@@ -137,17 +137,20 @@ osu-wine --devserver <host>
 
 Override the installer URL at runtime with `OSU_DOWNLOAD_URL=…` if needed.
 
-Discord Rich Presence is installed automatically into the wineprefix via
-[rpc-bridge](https://github.com/EnderIce2/rpc-bridge) (same as winello). The
-launcher bind-mounts host `discord-ipc-*` sockets into yawl’s pressure-vessel
-(so the bridge can reach Discord). Start Discord/Vesktop **before** osu!, and
-use `--fixrpc` if presence stops working.
+Discord Rich Presence needs three pieces:
 
-- **Vesktop**: enable *Discord Rich Presence* / arRPC in Vesktop settings so
-  `$XDG_RUNTIME_DIR/discord-ipc-0` exists.
-- **Flatpak Discord/Vesktop**: grant IPC filesystem access (Flatseal:
-  `xdg-run/discord-ipc-0`, plus Vesktop/Discord Flatpak xdg-run paths as
-  documented by rpc-bridge).
+1. **rpc-bridge** in the wineprefix (installed automatically; `--fixrpc` to
+   reinstall)
+2. A host **`discord-ipc-*` socket** — from Discord, Vesktop built-in arRPC
+   (`programs.vesktop.settings.arRPC = true`), or OpenAsar **arrpc** (the
+   launcher starts arrpc when no socket exists; `programs.osu-stable.arrpc`,
+   default on)
+3. Those sockets **bind-mounted** into yawl pressure-vessel (done by the
+   launcher)
+
+Start Discord/Vesktop with osu!. With Vesktop + standalone arrpc, enable the
+Vencord plugin *WebRichPresence (arRPC)* so Vesktop shows arrpc activities.
+Flatpak Discord/Vesktop also need IPC filesystem overrides (rpc-bridge docs).
 
 ## Bumping versions
 
@@ -168,6 +171,7 @@ The osu! installer itself is **not** hashed — it is downloaded at launch time.
 - [NelloKudo/osu-winello](https://github.com/NelloKudo/osu-winello) — reference for versions, yawl setup, prefix, and defaults
 - [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — file/URL handoff into a running Wine osu!
 - [EnderIce2/rpc-bridge](https://github.com/EnderIce2/rpc-bridge) — Discord Rich Presence under Wine
+- [OpenAsar/arrpc](https://github.com/OpenAsar/arrpc) — Discord IPC server for atypical clients
 - [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu builds
 - [whrvt/yawl](https://github.com/whrvt/yawl) — Steam Runtime wine launcher
 - [fufexan/nix-gaming](https://github.com/fufexan/nix-gaming) `osu-stable` — first-run installer pattern

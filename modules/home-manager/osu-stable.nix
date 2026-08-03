@@ -47,6 +47,17 @@ in
       '';
     };
 
+    arrpc = mkOption {
+      type = types.bool;
+      default = true;
+      description = ''
+        Enable OpenAsar arrpc so a discord-ipc-* socket exists for rpc-bridge.
+        Starts a user systemd service when available, and the launcher also
+        starts arrpc on demand if no socket is present. Disable if you already
+        run Discord/Vesktop built-in arRPC or a separate arrpc instance.
+      '';
+    };
+
     environment = mkOption {
       type = types.attrsOf types.str;
       default = {
@@ -102,6 +113,7 @@ in
       finalPackage = cfg.package.override {
         location = cfg.location;
         useGameMode = cfg.gamemode;
+        useArrpc = cfg.arrpc;
         configFile = envFile;
       };
     in
@@ -113,7 +125,7 @@ in
         }
       ];
 
-      home.packages = [ finalPackage ];
+      home.packages = [ finalPackage ] ++ lib.optional cfg.arrpc pkgs.arrpc;
 
       # Keep yawl wine paths in sync with the packaged wine-osu on every activation.
       home.activation.osuStableYawlConfigs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
