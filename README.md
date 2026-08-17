@@ -63,7 +63,7 @@ In your system `flake.nix`:
       ...
     }:
     {
-      nixosConfigurations.YOUR_HOSTNAME = nixpkgs.lib.nixosSystem {
+      nixosConfigurations.YOUR_CONFIGURATION = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
         modules = [
           ./configuration.nix
@@ -113,7 +113,7 @@ You do **not** need to set `package` yourself.
 
 ```bash
 nix flake update nix-osu-stable
-sudo nixos-rebuild switch --flake .#YOUR_HOSTNAME
+sudo nixos-rebuild switch --flake .#YOUR_CONFIGURATION
 
 osu-wine
 # or open “osu!(stable)” from your app menu
