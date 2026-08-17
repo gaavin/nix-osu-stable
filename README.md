@@ -96,7 +96,7 @@ Wine introduces latency. **Configure this in-game** or your hits will feel late:
 
 <div>
 <strong>Options → Audio → Offset:</strong>
-• <strong>Normal mode:</strong> −40 to −35 ms
+• <strong>Normal mode:</strong> −40 to −35 ms<br/>
 • <strong>Audio compatibility mode:</strong> −25 ms
 </div>
 
