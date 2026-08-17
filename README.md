@@ -11,30 +11,6 @@
 
 </div>
 
-<style>
-  .osu-section { 
-    border-left: 4px solid #ff66ab; 
-    padding-left: 16px; 
-    margin: 20px 0; 
-  }
-  .osu-highlight { 
-    background: linear-gradient(135deg, #ff66ab15, #00d4ff15); 
-    padding: 12px 16px; 
-    border-radius: 6px; 
-    border-left: 4px solid #ff66ab;
-  }
-  .osu-command { 
-    background: #0a0e27; 
-    color: #00d4ff; 
-    padding: 8px 12px; 
-    border-radius: 4px; 
-    font-family: monospace; 
-  }
-  code { color: #ff66ab; }
-  h2 { color: #ff66ab; border-bottom: 2px solid #ff66ab; padding-bottom: 8px; }
-  h3 { color: #00d4ff; }
-</style>
-
 ## ⚡ Quick Start
 
 **Just want to try it?**
@@ -118,9 +94,9 @@ osu-wine
 
 Wine introduces latency. **Configure this in-game** or your hits will feel late:
 
-<div class="osu-highlight">
-<strong>Options → Audio → Offset:</strong><br>
-• <strong>Normal mode:</strong> −40 to −35 ms<br>
+<div>
+<strong>Options → Audio → Offset:</strong>
+• <strong>Normal mode:</strong> −40 to −35 ms
 • <strong>Audio compatibility mode:</strong> −25 ms
 </div>
 
@@ -190,13 +166,13 @@ Start Discord first, then launch osu!. If broken after update: `osu-wine --fixrp
 
 | Command | Purpose |
 |---------|---------|
-| <span class="osu-command">osu-wine</span> | Launch |
-| <span class="osu-command">osu-wine --help</span> | List all commands |
-| <span class="osu-command">osu-wine --info</span> | Show config / paths |
-| <span class="osu-command">osu-wine --kill</span> | Force quit |
-| <span class="osu-command">osu-wine --fixrpc</span> | Reinstall Discord bridge |
-| <span class="osu-command">osu-wine --winecfg</span> | Wine settings |
-| <span class="osu-command">osu-wine --winetricks …</span> | winetricks in prefix |
+| <span>osu-wine</span> | Launch |
+| <span>osu-wine --help</span> | List all commands |
+| <span>osu-wine --info</span> | Show config / paths |
+| <span>osu-wine --kill</span> | Force quit |
+| <span>osu-wine --fixrpc</span> | Reinstall Discord bridge |
+| <span>osu-wine --winecfg</span> | Wine settings |
+| <span>osu-wine --winetricks …</span> | winetricks in prefix |
 
 Opening `.osz` / `.osk` / `.osr` files or `osu://` links **reuses the running instance**.
 
