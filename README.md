@@ -248,3 +248,4 @@ Built on [osu-winello](https://github.com/NelloKudo/osu-winello) stack:
 - [OpenAsar/arrpc](https://github.com/OpenAsar/arrpc) — Discord IPC
 - [openglfreak/osu-handler-wine](https://github.com/openglfreak/osu-handler-wine) — File handoff
 - [fufexan/nix-gaming](https://github.com/fufexan/nix-gaming) — Pattern inspiration
+- God
