@@ -1,7 +1,5 @@
 <div align="center">
-
-<img src="https://github.com/ppy/osu/blob/master/assets/logo.png?raw=true" width="100" alt="osu! logo">
-
+  
 # nix-osu-stable
 
 **Play osu! on NixOS** — native integration using Wine, Steam Runtime, and a prebuilt prefix.
