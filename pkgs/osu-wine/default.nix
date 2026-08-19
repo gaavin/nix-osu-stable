@@ -23,6 +23,7 @@
   xz,
   findutils,
   procps,
+  python3,
   gamemode,
   versions,
   pname ? "osu-wine",
@@ -56,6 +57,9 @@ let
       WINEFSYNC = "1";
       WINEESYNC = "1";
       WINE_AUDIO_DRIVER = "pipewire";
+      # 64 frames @ 48 kHz ≈ 1.3 ms period (driver default is 128). Raise if crackling.
+      WINE_PIPEWIRE_QUANTUM = "64";
+      PIPEWIRE_QUANTUM = "64/48000";
       WINE_DISABLE_FULLSCREEN_HACK = "1";
       vblank_mode = "0";
       __GL_SYNC_TO_VBLANK = "0";
@@ -73,6 +77,7 @@ let
   );
 
   resolvedConfig = if configFile != null then configFile else packagedConfig;
+  latencyTool = ./osu-latency.py;
 
   script = writeShellApplication {
     name = pname;
@@ -88,6 +93,7 @@ let
       xz
       findutils
       procps
+      python3
       winetricks
       steam-run
     ]
@@ -116,6 +122,7 @@ let
       OSU_HANDLER_BIN="${osu-mime}/bin/osu-handler-wine"
       OSU_HANDLER_REG="${osu-mime}/share/nix-osu-stable/osu-handler.reg"
       MARKER_HANDLER_REG="$WINEPREFIX_DIR/.nix-osu-stable-handler-reg"
+      LATENCY_PY="${latencyTool}"
       RPC_BRIDGE_EXE="${rpc-bridge}/bridge.exe"
       MARKER_RPC_BRIDGE="$WINEPREFIX_DIR/.nix-osu-stable-rpc-bridge"
       ARRPC_BIN="${optionalString useArrpc "${arrpc}/bin/arrpc"}"
@@ -629,6 +636,8 @@ let
         --regedit         Run regedit
         --wine <args>     Run wine with args
         --kill / --kill9
+        --latency         Audio stack + recommended Universal Offset
+        --hiterror [osr]  Mean signed hit error from a replay (latest if omitted)
         --devserver <h>   Launch with -devserver <h>
 
       State: $STATE_DIR
@@ -639,6 +648,27 @@ let
 
       case "''${1:-}" in
         --help|-h) usage; exit 0 ;;
+        --latency)
+          if [ -r "$CONFIG_FILE" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            source "$CONFIG_FILE"
+            set +a
+          fi
+          export OSUPATH
+          exec python3 "$LATENCY_PY" --osu-path "$OSUPATH"
+          ;;
+        --hiterror)
+          if [ -r "$CONFIG_FILE" ]; then
+            set -a
+            # shellcheck disable=SC1090
+            source "$CONFIG_FILE"
+            set +a
+          fi
+          export OSUPATH
+          shift
+          exec python3 "$LATENCY_PY" --osu-path "$OSUPATH" --hiterror "$@"
+          ;;
         --info)
           prepare
           cat <<EOF

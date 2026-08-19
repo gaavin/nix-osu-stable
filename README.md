@@ -90,21 +90,23 @@ osu-wine
 
 ## 🎵 Essential: Set Audio Offset
 
-Wine introduces latency. **Configure this in-game** or your hits will feel late:
+Wine still adds delay even with native PipeWire. **Set Universal Offset in-game** or hits feel late:
 
 <div>
-<strong>Options → Audio → Offset:</strong><br/>
-• <strong>Normal mode:</strong> −40 to −35 ms<br/>
-• <strong>Audio compatibility mode:</strong> −25 ms
+<strong>Options → Audio → Offset</strong> (with <code>WINE_AUDIO_DRIVER=pipewire</code>, the default):<br/>
+• <strong>Normal mode:</strong> −35 to −30 ms<br/>
+• <strong>Audio compatibility mode:</strong> −20 ms
 </div>
 
-Every setup differs — watch the hit error meter and fine-tune.
+That is ~5 ms less negative than the old winepulse starting point (Offset Wizard reports from the winepipewire testers). The PipeWire buffer itself is only ~1–3 ms at quantum 64/128 — the rest is still Wine/WASAPI/osu!. Fine-tune on the hit error meter or run `osu-wine --latency` / `osu-wine --hiterror`.
+
+If you unset `WINE_AUDIO_DRIVER`, go back to −40 to −35 (or −25 in compatibility mode).
 
 ---
 
 ## 🔊 Optional: Low-Latency PipeWire
 
-Default PipeWire works, but a locked quantum reduces buffer delay to ~2.7ms:
+This flake also sets `WINE_PIPEWIRE_QUANTUM=64` and `PIPEWIRE_QUANTUM=64/48000` (~1.3 ms period). PipeWire’s session quantum still has to allow that:
 
 ```nix
 # In configuration.nix (NixOS, not Home Manager):
@@ -114,21 +116,21 @@ services.pipewire = {
   extraConfig.pipewire."92-low-latency" = {
     "context.properties" = {
       "default.clock.rate" = 48000;
-      "default.clock.quantum" = 128;
-      "default.clock.min-quantum" = 128;
-      "default.clock.max-quantum" = 128;
+      "default.clock.quantum" = 64;
+      "default.clock.min-quantum" = 32;
+      "default.clock.max-quantum" = 256;
     };
   };
   extraConfig.pipewire-pulse."92-low-latency" = {
     "pulse.properties" = {
-      "pulse.min.req" = "128/48000";
-      "pulse.default.req" = "128/48000";
-      "pulse.max.req" = "128/48000";
-      "pulse.min.quantum" = "128/48000";
-      "pulse.max.quantum" = "128/48000";
+      "pulse.min.req" = "64/48000";
+      "pulse.default.req" = "64/48000";
+      "pulse.max.req" = "64/48000";
+      "pulse.min.quantum" = "64/48000";
+      "pulse.max.quantum" = "64/48000";
     };
     "stream.properties" = {
-      "node.latency" = "128/48000";
+      "node.latency" = "64/48000";
       "resample.quality" = 1;
     };
   };
@@ -137,9 +139,9 @@ services.pipewire = {
 security.rtkit.enable = true;
 ```
 
-After rebuild, restart PipeWire and **re-check your audio offset** — lower latency changes how it feels.
+After rebuild, restart PipeWire and **re-check Universal Offset**.
 
-**Hearing crackling?** Try `quantum = 256` instead.
+**Crackling?** Raise quantum (and `WINE_PIPEWIRE_QUANTUM`) to `128` or `256`. Stable at 32 is hardware-dependent — `osu-wine --latency` prints the period math.
 
 ---
 
@@ -167,6 +169,8 @@ Start Discord first, then launch osu!. If broken after update: `osu-wine --fixrp
 | <span>osu-wine</span> | Launch |
 | <span>osu-wine --help</span> | List all commands |
 | <span>osu-wine --info</span> | Show config / paths |
+| <span>osu-wine --latency</span> | Audio stack + suggested offset |
+| <span>osu-wine --hiterror</span> | Mean hit error from latest replay |
 | <span>osu-wine --kill</span> | Force quit |
 | <span>osu-wine --fixrpc</span> | Reinstall Discord bridge |
 | <span>osu-wine --winecfg</span> | Wine settings |
@@ -194,7 +198,7 @@ Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! 
 
 | Issue | Solution |
 |-------|----------|
-| Hits feel late | Set audio offset (−40/−35 ms) |
+| Hits feel late | Set Universal Offset (−35/−30 ms with PipeWire; `osu-wine --latency`) |
 | Audio crackling | Raise PipeWire quantum to `256` |
 | First launch hangs | Normal (downloading Steam Runtime); ensure network access |
 | Won't start after update | `osu-wine --kill` then relaunch |

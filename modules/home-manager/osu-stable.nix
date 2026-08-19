@@ -70,6 +70,8 @@ in
         WINEFSYNC = "1";
         WINEESYNC = "1";
         WINE_AUDIO_DRIVER = "pipewire";
+        WINE_PIPEWIRE_QUANTUM = "64";
+        PIPEWIRE_QUANTUM = "64/48000";
         WINE_DISABLE_FULLSCREEN_HACK = "1";
         vblank_mode = "0";
         __GL_SYNC_TO_VBLANK = "0";
