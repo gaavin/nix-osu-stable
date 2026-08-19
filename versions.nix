@@ -2,9 +2,9 @@
 # Bump these when upstream bumps wine-osu / yawl / prefix / mime bins.
 {
   wineOsu = {
-    version = "11.12-1";
-    url = "https://github.com/NelloKudo/WineBuilder/releases/download/wine-osu-staging-11.12-1/wine-osu-winello-fonts-wow64-11.12-1-x86_64.tar.xz";
-    hash = "sha256-/4SBFDL4Iw+lsaqlLBIyH6BslJ4z5rhi43dD+euntwg=";
+    version = "11.12-2";
+    url = "https://github.com/NelloKudo/WineBuilder/releases/download/wine-osu-staging-11.12-2/wine-osu-winello-fonts-wow64-11.12-2-x86_64.tar.xz";
+    hash = "sha256-fk9ZCmXwEa7PpXifOJleUMPOjq9hO9rO8kqPCXYk0J8=";
   };
 
   yawl = {
