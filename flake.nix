@@ -3,10 +3,18 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    offset-calc-osu-stable = {
+      url = "github:gaavin/offset-calc-osu-stable";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      offset-calc-osu-stable,
+    }:
     let
       system = "x86_64-linux";
       pkgs = import nixpkgs {
@@ -31,15 +39,22 @@
             rpc-bridge
             ;
         };
+        osu-offset = offset-calc-osu-stable.packages.${system}.default;
         default = osu-wine;
       };
     in
     {
       packages.${system} = packages;
 
-      apps.${system}.default = {
-        type = "app";
-        program = "${packages.osu-wine}/bin/osu-wine";
+      apps.${system} = {
+        default = {
+          type = "app";
+          program = "${packages.osu-wine}/bin/osu-wine";
+        };
+        osu-offset = {
+          type = "app";
+          program = "${packages.osu-offset}/bin/osu-offset";
+        };
       };
 
       homeModules.osu-stable =
@@ -49,6 +64,9 @@
           # Default to this flake's osu-wine; users can still override.
           programs.osu-stable.package = lib.mkDefault (
             self.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine
+          );
+          programs.osu-stable.offsetCalculator.package = lib.mkDefault (
+            self.packages.${pkgs.stdenv.hostPlatform.system}.osu-offset
           );
         };
       homeModules.default = self.homeModules.osu-stable;
@@ -61,6 +79,7 @@
           osu-mime
           rpc-bridge
           osu-wine
+          osu-offset
           ;
       };
     };

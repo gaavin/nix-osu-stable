@@ -66,6 +66,7 @@ nix run github:gaavin/nix-osu-stable
   programs.osu-stable = {
     enable = true;
     # Uncomment for custom options:
+    # offsetCalculator.enable = true;  # osu-offset CLI (no extra flake input)
     # environment.WINE_ENABLE_ABS_TABLET_HACK = "2";  # Tablet fix
     # location = "${config.xdg.dataHome}/nix-osu-stable";
     # gamemode = false;
@@ -99,6 +100,17 @@ Wine introduces latency. **Configure this in-game** or your hits will feel late:
 </div>
 
 Every setup differs — watch the hit error meter and fine-tune.
+
+Or enable [osu-offset](https://github.com/gaavin/offset-calc-osu-stable) in the same Home Manager module (no extra flake input):
+
+```nix
+programs.osu-stable = {
+  enable = true;
+  offsetCalculator.enable = true;
+};
+```
+
+Then run `osu-offset`. It reads your recent stable replays and prints a recommended universal Offset the same way osu!lazer does.
 
 ---
 
@@ -194,7 +206,7 @@ Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! 
 
 | Issue | Solution |
 |-------|----------|
-| Hits feel late | Set audio offset (−40/−35 ms) |
+| Hits feel late | Set audio offset (−40/−35 ms), or enable `offsetCalculator` and run `osu-offset` |
 | Audio crackling | Raise PipeWire quantum to `256` |
 | First launch hangs | Normal (downloading Steam Runtime); ensure network access |
 | Won't start after update | `osu-wine --kill` then relaunch |
@@ -226,6 +238,7 @@ inputs.nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine.overr
 
 ### Available flake packages
 - `osu-wine` — Launcher, desktop entry, MIME handlers (default)
+- `osu-offset` — Recommend universal Offset from recent plays
 - `wine-osu` — Wine binaries
 - `yawl` — Steam Runtime launcher
 - `osu-wineprefix` — Prefix seed
