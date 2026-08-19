@@ -55,6 +55,7 @@ let
       WINENTSYNC = "1";
       WINEFSYNC = "1";
       WINEESYNC = "1";
+      WINE_AUDIO_DRIVER = "pipewire";
       WINE_DISABLE_FULLSCREEN_HACK = "1";
       vblank_mode = "0";
       __GL_SYNC_TO_VBLANK = "0";
