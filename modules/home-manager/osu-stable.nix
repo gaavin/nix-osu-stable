@@ -102,6 +102,21 @@ in
       default = "";
       description = "Raw lines appended to the generated env config file.";
     };
+
+    offsetCalculator = {
+      enable = mkEnableOption "osu-offset (recommend universal Offset from recent plays, like osu!lazer)";
+
+      package = mkOption {
+        type = types.nullOr types.package;
+        default = null;
+        defaultText = literalExpression "nix-osu-stable.packages.\${pkgs.stdenv.hostPlatform.system}.osu-offset";
+        description = ''
+          osu-offset package. When you import `nix-osu-stable.homeModules.osu-stable`
+          from the flake, this is provided automatically — you do not need to add
+          offset-calc-osu-stable to your system flake.
+        '';
+      };
+    };
   };
 
   config = mkIf cfg.enable (
@@ -124,6 +139,12 @@ in
       };
     in
     {
+      home.packages =
+        [ finalPackage ]
+        ++ lib.optional cfg.arrpc pkgs.arrpc
+        ++ lib.optional (cfg.offsetCalculator.enable && cfg.offsetCalculator.package != null)
+          cfg.offsetCalculator.package;
+
       assertions = [
         {
           assertion = cfg.package != null;
@@ -133,9 +154,16 @@ in
             nix-osu-stable.packages.''${pkgs.stdenv.hostPlatform.system}.osu-wine.
           '';
         }
+        {
+          assertion = !cfg.offsetCalculator.enable || cfg.offsetCalculator.package != null;
+          message = ''
+            programs.osu-stable.offsetCalculator.enable is true but package is unset.
+            Import nix-osu-stable.homeModules.osu-stable from the flake, or set
+            programs.osu-stable.offsetCalculator.package to
+            nix-osu-stable.packages.''${pkgs.stdenv.hostPlatform.system}.osu-offset.
+          '';
+        }
       ];
-
-      home.packages = [ finalPackage ] ++ lib.optional cfg.arrpc pkgs.arrpc;
 
       # Keep yawl wine paths in sync with the packaged wine-osu on every activation.
       home.activation.osuStableYawlConfigs = lib.hm.dag.entryAfter [ "writeBoundary" ] ''

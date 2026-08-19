@@ -16,9 +16,30 @@
         "type": "github"
       }
     },
+    "offset-calc-osu-stable": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1787172492,
+        "narHash": "sha256-iMH6eC/YwP3RGoD9aB2TEE+XnH4NC//w6hnA5sD7Toc=",
+        "owner": "gaavin",
+        "repo": "offset-calc-osu-stable",
+        "rev": "60da70aef8ce95f04d1f23b23ac2fc19e5bb5ca0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "gaavin",
+        "repo": "offset-calc-osu-stable",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "offset-calc-osu-stable": "offset-calc-osu-stable"
       }
     }
   },
