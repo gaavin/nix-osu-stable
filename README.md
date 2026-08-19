@@ -110,7 +110,7 @@ programs.osu-stable = {
 };
 ```
 
-Then run `osu-offset`. It reads your recent stable replays and prints a recommended universal Offset the same way osu!lazer does.
+Then run `osu-offset`. It watches running `osu!.exe` processes, reads **live hit error** from memory, and prints a recommended universal Offset for the current session. It does not scan old `.osr` replays. Leave it running while you play.
 
 ---
 
@@ -206,7 +206,7 @@ Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! 
 
 | Issue | Solution |
 |-------|----------|
-| Hits feel late | Set audio offset (−40/−35 ms), or enable `offsetCalculator` and run `osu-offset` |
+| Hits feel late | Enable `offsetCalculator`, run `osu-offset` while you play, and set the printed Offset |
 | Audio crackling | Raise PipeWire quantum to `256` |
 | First launch hangs | Normal (downloading Steam Runtime); ensure network access |
 | Won't start after update | `osu-wine --kill` then relaunch |
@@ -238,7 +238,7 @@ inputs.nix-osu-stable.packages.${pkgs.stdenv.hostPlatform.system}.osu-wine.overr
 
 ### Available flake packages
 - `osu-wine` — Launcher, desktop entry, MIME handlers (default)
-- `osu-offset` — Recommend universal Offset from recent plays
+- `osu-offset` — Watch osu!.exe and recommend universal Offset from live hit error
 - `wine-osu` — Wine binaries
 - `yawl` — Steam Runtime launcher
 - `osu-wineprefix` — Prefix seed

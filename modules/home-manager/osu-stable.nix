@@ -104,7 +104,7 @@ in
     };
 
     offsetCalculator = {
-      enable = mkEnableOption "osu-offset (recommend universal Offset from recent plays, like osu!lazer)";
+      enable = mkEnableOption "osu-offset (watch running osu!.exe and recommend Offset from live hit error)";
 
       package = mkOption {
         type = types.nullOr types.package;
