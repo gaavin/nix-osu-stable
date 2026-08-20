@@ -110,9 +110,11 @@ programs.osu-stable = {
 };
 ```
 
-Then run `osu-offset`. It watches running `osu!.exe` processes, reads **live hit error** from memory, and prints a recommended universal Offset for the current session. It does not scan old `.osr` replays. Leave it running while you play.
+Then run `osu-offset` alongside `osu-wine`. It attaches to `osu!.exe`, reads **live hit error** from memory after each play, and prints a terminal dashboard with a recommended universal Offset for your current session (not old `.osr` replays). Leave it running while you play.
 
 ![osu-offset example output](assets/osu-offset-example.png)
+
+After a map with ≥ 50 timed hits, the dashboard shows the **Recommended Offset**, a hit-error histogram, play stats (map, hits, median/mean, UR), and an offset calibration slider with `recommended = current − median`. Set the value in **Options → Audio → Offset** and keep playing — it updates after every usable play.
 
 ---
 
