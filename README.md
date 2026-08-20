@@ -112,6 +112,8 @@ programs.osu-stable = {
 
 Then run `osu-offset`. It watches running `osu!.exe` processes, reads **live hit error** from memory, and prints a recommended universal Offset for the current session. It does not scan old `.osr` replays. Leave it running while you play.
 
+![osu-offset example output](assets/osu-offset-example.png)
+
 ---
 
 ## 🔊 Optional: Low-Latency PipeWire
