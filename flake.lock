@@ -23,11 +23,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1787187396,
-        "narHash": "sha256-/RTkb7UaY0Cl4SVEZfj41bVyiwpJqon+V8tEm9ESrsU=",
+        "lastModified": 1787279683,
+        "narHash": "sha256-gHwz/G1J69Vs5DTVcyXYOktLyhMpN8SyoaCz5jyCrNM=",
         "owner": "gaavin",
         "repo": "offset-calc-osu-stable",
-        "rev": "11ddeb930241b4501c17e0e29a2ac35ea43bfdc3",
+        "rev": "ccb640f86f8c12e50356062168cb347fba12c174",
         "type": "github"
       },
       "original": {
