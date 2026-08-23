@@ -1,6 +1,3 @@
-> [!WARNING]
-> **This project was primarily written by an LLM (AI). Review the code yourself before running it. Use at your own risk.**
-
 <div align="center">
   
 # nix-osu-stable
@@ -11,6 +8,9 @@
 [![Flake](https://img.shields.io/badge/Flake-enabled-success)](https://nixos.wiki/wiki/Flakes)
 
 </div>
+
+> [!WARNING]
+> **This project was primarily written by an LLM (AI). Review the code yourself before running it. Use at your own risk.**
 
 ## ⚡ Quick Start
 
