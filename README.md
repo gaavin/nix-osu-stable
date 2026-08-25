@@ -9,9 +9,6 @@
 
 </div>
 
-> [!WARNING]
-> **This project was primarily written by an LLM (AI). Review the code yourself before running it. Use at your own risk.**
-
 ## ⚡ Quick Start
 
 **Just want to try it?**
