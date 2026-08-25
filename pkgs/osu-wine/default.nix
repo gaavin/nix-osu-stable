@@ -79,7 +79,17 @@ let
 
   resolvedConfig = if configFile != null then configFile else packagedConfig;
 
-  applyGameSettings = ./apply-game-settings.sh;
+  # Standalone so Home Manager activation has awk/sed/grep on PATH (minimal env).
+  applyGameSettings = writeShellApplication {
+    name = "osu-apply-game-settings";
+    runtimeInputs = [
+      coreutils
+      gnugrep
+      gnused
+      gawk
+    ];
+    text = builtins.readFile ./apply-game-settings.sh;
+  };
 
   script = writeShellApplication {
     name = pname;
@@ -114,7 +124,7 @@ let
       GAME_SETTINGS_FILE="''${OSU_STABLE_GAME_SETTINGS:-${optionalString (gameSettingsFile != null) gameSettingsFile}}"
       GLOBAL_SETTINGS_FILE="''${OSU_STABLE_GLOBAL_SETTINGS:-${optionalString (globalSettingsFile != null) globalSettingsFile}}"
       USER_CONFIG_NAME="''${OSU_STABLE_USER_CONFIG_NAME:-${if userConfigFileName != null then userConfigFileName else ""}}"
-      APPLY_GAME_SETTINGS="${applyGameSettings}"
+      APPLY_GAME_SETTINGS="${applyGameSettings}/bin/osu-apply-game-settings"
       WINE_OSU="${wine-osu}"
       YAWL_BIN="${yawl}/bin/yawl"
       PREFIX_SEED="${osu-wineprefix}"
@@ -453,14 +463,14 @@ let
         mkdir -p "$OSUPATH"
         if [ -n "$GLOBAL_SETTINGS_FILE" ] && [ -r "$GLOBAL_SETTINGS_FILE" ]; then
           info "Applying declarative global osu! settings"
-          sh "$APPLY_GAME_SETTINGS" "$GLOBAL_SETTINGS_FILE" "$OSUPATH/osu!.cfg"
+          "$APPLY_GAME_SETTINGS" "$GLOBAL_SETTINGS_FILE" "$OSUPATH/osu!.cfg"
         fi
         if [ -n "$GAME_SETTINGS_FILE" ] && [ -r "$GAME_SETTINGS_FILE" ]; then
           local user_cfg_name user_cfg
           user_cfg_name="''${USER_CONFIG_NAME:-osu!.$(whoami).cfg}"
           user_cfg="$OSUPATH/$user_cfg_name"
           info "Applying declarative user osu! settings -> $user_cfg_name"
-          sh "$APPLY_GAME_SETTINGS" "$GAME_SETTINGS_FILE" "$user_cfg"
+          "$APPLY_GAME_SETTINGS" "$GAME_SETTINGS_FILE" "$user_cfg"
         fi
       }
 

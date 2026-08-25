@@ -218,7 +218,7 @@ in
         // lib.optionalAttrs (globalSettingsFile != null) { inherit globalSettingsFile; }
       );
 
-      applySettings = finalPackage.applyGameSettings;
+      applySettings = "${finalPackage.applyGameSettings}/bin/osu-apply-game-settings";
       osuDir = "${cfg.location}/osu";
       userCfgPath = "${osuDir}/${cfg.userConfigFileName}";
       globalCfgPath = "${osuDir}/osu!.cfg";
@@ -272,10 +272,10 @@ in
         lib.optionalString (gameSettingsFile != null || globalSettingsFile != null) ''
           if [ -d ${escapeShellArg osuDir} ]; then
             ${lib.optionalString (globalSettingsFile != null) ''
-              $DRY_RUN_CMD ${pkgs.runtimeShell} ${escapeShellArg applySettings} ${escapeShellArg globalSettingsFile} ${escapeShellArg globalCfgPath}
+              $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg globalSettingsFile} ${escapeShellArg globalCfgPath}
             ''}
             ${lib.optionalString (gameSettingsFile != null) ''
-              $DRY_RUN_CMD ${pkgs.runtimeShell} ${escapeShellArg applySettings} ${escapeShellArg gameSettingsFile} ${escapeShellArg userCfgPath}
+              $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg gameSettingsFile} ${escapeShellArg userCfgPath}
             ''}
           fi
         ''

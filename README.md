@@ -221,6 +221,8 @@ Start Discord first, then launch osu!. If broken after update: `osu-wine --fixrp
 | <span>osu-wine</span> | Launch |
 | <span>osu-wine --help</span> | List all commands |
 | <span>osu-wine --info</span> | Show config / paths |
+| <span>osu-wine --apply-settings</span> | Merge declarative in-game settings into `osu!.*.cfg` |
+| <span>osu-wine --export-settings</span> | Print non-secret user cfg keys as nix attr lines |
 | <span>osu-wine --kill</span> | Force quit |
 | <span>osu-wine --fixrpc</span> | Reinstall Discord bridge |
 | <span>osu-wine --winecfg</span> | Wine settings |
