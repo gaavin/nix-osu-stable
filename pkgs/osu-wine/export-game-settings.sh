@@ -1,19 +1,38 @@
-# Print osu!.*.cfg keys that differ from factory defaults as nix attr lines.
-# Usage: osu-export-game-settings <user.cfg> [factory.cfg]
+# Print osu!.*.cfg keys that differ from factory defaults as a per-user nix attr.
+# Usage: osu-export-game-settings <user.cfg> [factory.cfg] [username]
 # Skips secrets, file-integrity hashes, and ephemeral session/version keys.
+# Output shape:
+#   <username> = {
+#     Key = value;
+#   };
 
 set -euo pipefail
 
 user_cfg="${1:?user cfg path}"
 factory_cfg="${2:-}"
+username="${3:-}"
 
 if [ ! -f "$user_cfg" ]; then
   printf 'nix-osu-stable: no user config at %s (change settings in-game and exit once)\n' "$user_cfg" >&2
   exit 1
 fi
 
+if [ -z "$username" ]; then
+  base="$(basename "$user_cfg")"
+  case "$base" in
+    osu!.*)
+      username="${base#osu!.}"
+      username="${username%.cfg}"
+      ;;
+    *)
+      username="${base%.cfg}"
+      ;;
+  esac
+fi
+
 export EXPORT_OSU_USER="$user_cfg"
 export EXPORT_OSU_FACTORY="$factory_cfg"
+export EXPORT_OSU_USERNAME="$username"
 
 awk '
 function trim(s) {
@@ -58,6 +77,7 @@ function print_nix(k, v) {
 BEGIN {
   user = ENVIRON["EXPORT_OSU_USER"]
   factory = ENVIRON["EXPORT_OSU_FACTORY"]
+  username = ENVIRON["EXPORT_OSU_USERNAME"]
 
   if (factory != "" && factory != "/dev/null") {
     while ((getline line < factory) > 0) {
@@ -75,6 +95,7 @@ BEGIN {
     close(factory)
   }
 
+  printf "  %s = {\n", username
   while ((getline line < user) > 0) {
     sub(/^\xef\xbb\xbf/, "", line)
     gsub(/\r/, "", line)
@@ -88,5 +109,6 @@ BEGIN {
     print_nix(key, val)
   }
   close(user)
+  printf "  };\n"
 }
 '

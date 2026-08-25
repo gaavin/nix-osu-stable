@@ -7,6 +7,7 @@
 
 let
   inherit (lib)
+    concatMapStrings
     concatStringsSep
     escapeShellArg
     literalExpression
@@ -26,6 +27,8 @@ let
     types.float
   ];
 
+  userSettingsType = types.attrsOf settingsValueType;
+
   formatSettingsValue = v: if builtins.isBool v then (if v then "1" else "0") else toString v;
 
   formatSettingsFile =
@@ -35,7 +38,7 @@ let
     );
 
   secretSettingKeys = lib.filter (k: lib.toLower k == "password") (
-    (lib.attrNames cfg.settings) ++ (lib.attrNames cfg.globalSettings)
+    (lib.concatMap lib.attrNames (lib.attrValues cfg.settings)) ++ (lib.attrNames cfg.globalSettings)
   );
 in
 {
@@ -123,22 +126,26 @@ in
     };
 
     settings = mkOption {
-      type = types.attrsOf settingsValueType;
+      type = types.attrsOf userSettingsType;
       default = { };
       example = {
-        Offset = -35;
-        RawInput = true;
-        MouseSpeed = 1.0;
-        FrameSync = "Unlimited";
-        DiscordRichPresence = true;
-        VolumeUniversal = 50;
+        max = {
+          Offset = -35;
+          RawInput = true;
+          MouseSpeed = 1.0;
+          FrameSync = "Unlimited";
+          DiscordRichPresence = true;
+          VolumeUniversal = 50;
+          Skin = "Shigetora's Skin";
+        };
       };
       description = ''
-        Declarative osu! in-game settings merged into the per-user config
-        (`osu!.<wine-user>.cfg` by default) on Home Manager activation and
-        every launch. Only list overrides vs factory defaults — use
-        `osu-wine --export-settings` to print them. Unmanaged keys (including
-        a locally saved Password hash) are preserved. Never set `Password` here.
+        Per-user declarative osu! settings. Each attribute name is the Wine /
+        osu! username and is merged into `osu!.<user>.cfg` on Home Manager
+        activation and every launch. Only list overrides vs factory defaults —
+        use `osu-wine --export-settings` to print them. Unmanaged keys
+        (including a locally saved Password hash) are preserved. Never set
+        `Password` here.
       '';
     };
 
@@ -161,8 +168,10 @@ in
       defaultText = literalExpression "\"osu!.\${config.home.username}.cfg\"";
       example = "osu!.alice.cfg";
       description = ''
-        Filename under the osu! install directory for per-user settings.
-        Matches Wine's Windows username by default (see `home.username`).
+        Default per-user cfg filename used by `--export-settings` when no
+        explicit user is given. Matches Wine's Windows username by default
+        (see `home.username`). Declarative `settings.<user>` keys choose their
+        own `osu!.<user>.cfg` targets independently.
       '';
     };
 
@@ -184,7 +193,7 @@ in
     skins = mkOption {
       type = types.listOf types.str;
       default = [ ];
-      example = [ "https://example.com/MySkin.osk" ];
+      example = [ "https://circle-people.com/wp-content/Skins/Cookiezi/Cookiezi%2004.osk" ];
       description = ''
         Direct HTTPS URLs to `.osk` skin archives. Missing skins are downloaded
         and extracted into `Skins/` on Home Manager activation and every launch.
@@ -216,11 +225,17 @@ in
           concatStringsSep "\n" (map toString entries) + lib.optionalString (entries != [ ]) "\n"
         );
 
-      gameSettingsFile =
+      gameSettingsDir =
         if cfg.settings == { } then
           null
         else
-          formatSettingsFile "osu-stable-user-settings.cfg" cfg.settings;
+          pkgs.linkFarm "osu-stable-user-settings" (
+            mapAttrsToList (user: attrs: {
+              name = "${user}.cfg";
+              path = formatSettingsFile "osu-stable-${user}.cfg" attrs;
+            }) cfg.settings
+          );
+
       globalSettingsFile =
         if cfg.globalSettings == { } then
           null
@@ -248,7 +263,7 @@ in
           configFile = envFile;
           userConfigFileName = cfg.userConfigFileName;
         }
-        // lib.optionalAttrs (gameSettingsFile != null) { inherit gameSettingsFile; }
+        // lib.optionalAttrs (gameSettingsDir != null) { inherit gameSettingsDir; }
         // lib.optionalAttrs (globalSettingsFile != null) { inherit globalSettingsFile; }
         // lib.optionalAttrs (beatmapsFile != null) { inherit beatmapsFile; }
         // lib.optionalAttrs (skinsFile != null) { inherit skinsFile; }
@@ -257,7 +272,6 @@ in
       applySettings = "${finalPackage.applyGameSettings}/bin/osu-apply-game-settings";
       syncContent = "${finalPackage.syncContent}/bin/osu-sync-content";
       osuDir = "${cfg.location}/osu";
-      userCfgPath = "${osuDir}/${cfg.userConfigFileName}";
       globalCfgPath = "${osuDir}/osu!.cfg";
     in
     {
@@ -322,14 +336,16 @@ in
 
       # Merge declarative in-game settings when the install dir already exists.
       home.activation.osuStableGameSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
-        lib.optionalString (gameSettingsFile != null || globalSettingsFile != null) ''
+        lib.optionalString (gameSettingsDir != null || globalSettingsFile != null) ''
           if [ -d ${escapeShellArg osuDir} ]; then
             ${lib.optionalString (globalSettingsFile != null) ''
               $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg globalSettingsFile} ${escapeShellArg globalCfgPath}
             ''}
-            ${lib.optionalString (gameSettingsFile != null) ''
-              $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg gameSettingsFile} ${escapeShellArg userCfgPath}
-            ''}
+            ${lib.optionalString (gameSettingsDir != null) (
+              concatMapStrings (user: ''
+                $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg "${gameSettingsDir}/${user}.cfg"} ${escapeShellArg "${osuDir}/osu!.${user}.cfg"}
+              '') (lib.attrNames cfg.settings)
+            )}
           fi
         ''
       );
