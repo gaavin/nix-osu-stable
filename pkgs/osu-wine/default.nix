@@ -34,9 +34,7 @@
   useArrpc ? true,
   # Path to a shell-sourceable env file (HM generates one; package ships a default).
   configFile ? null,
-  # Declarative per-user osu!.<user>.cfg fragments (directory of <user>.cfg).
-  # Password is refused. Legacy single-file gameSettingsFile is still accepted.
-  gameSettingsDir ? null,
+  # Declarative osu!.*.cfg fragments (Key = value). Password is refused.
   gameSettingsFile ? null,
   globalSettingsFile ? null,
   # Declarative content manifests (one beatmap set id / .osk URL per line).
@@ -152,9 +150,6 @@ let
       OSUPATH="$STATE_DIR/osu"
       YAWL_INSTALL_DIR="$STATE_DIR/yawl"
       CONFIG_FILE="''${OSU_STABLE_CONFIG:-${resolvedConfig}}"
-      GAME_SETTINGS_DIR="''${OSU_STABLE_GAME_SETTINGS_DIR:-${
-        optionalString (gameSettingsDir != null) gameSettingsDir
-      }}"
       GAME_SETTINGS_FILE="''${OSU_STABLE_GAME_SETTINGS:-${
         optionalString (gameSettingsFile != null) gameSettingsFile
       }}"
@@ -510,17 +505,7 @@ let
           info "Applying declarative global osu! settings"
           "$APPLY_GAME_SETTINGS" "$GLOBAL_SETTINGS_FILE" "$OSUPATH/osu!.cfg"
         fi
-        if [ -n "$GAME_SETTINGS_DIR" ] && [ -d "$GAME_SETTINGS_DIR" ]; then
-          local fragment user user_cfg
-          for fragment in "$GAME_SETTINGS_DIR"/*.cfg; do
-            [ -r "$fragment" ] || continue
-            user="$(basename "$fragment" .cfg)"
-            [ -n "$user" ] || continue
-            user_cfg="$OSUPATH/osu!.$user.cfg"
-            info "Applying declarative user osu! settings -> osu!.$user.cfg"
-            "$APPLY_GAME_SETTINGS" "$fragment" "$user_cfg"
-          done
-        elif [ -n "$GAME_SETTINGS_FILE" ] && [ -r "$GAME_SETTINGS_FILE" ]; then
+        if [ -n "$GAME_SETTINGS_FILE" ] && [ -r "$GAME_SETTINGS_FILE" ]; then
           local user_cfg_name user_cfg
           user_cfg_name="''${USER_CONFIG_NAME:-osu!.$(whoami).cfg}"
           user_cfg="$OSUPATH/$user_cfg_name"
@@ -925,7 +910,6 @@ symlinkJoin {
       syncContent
       ;
     envConfig = resolvedConfig;
-    gameSettingsDir = gameSettingsDir;
     gameSettingsFile = gameSettingsFile;
     globalSettingsFile = globalSettingsFile;
     beatmapsFile = beatmapsFile;

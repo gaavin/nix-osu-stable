@@ -71,9 +71,9 @@ nix run github:gaavin/nix-osu-stable
     # location = "${config.xdg.dataHome}/nix-osu-stable";
     # gamemode = false;
     # preLaunchArgs = "mangohud";
-    # settings.<user>.Offset = -35;
+    # settings.Offset = -35;
     # beatmaps = [ 75 ];
-    # skins = [ "https://circle-people.com/wp-content/Skins/Cookiezi/Cookiezi%2004.osk" ];
+    # skins = [ "https://example.com/MySkin.osk" ];
   };
 }
 ```
@@ -129,17 +129,15 @@ Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://o
 programs.osu-stable = {
   enable = true;
 
-  # Per-user files: ~/.local/share/nix-osu-stable/osu/osu!.<user>.cfg
+  # Per-user file: ~/.local/share/nix-osu-stable/osu/osu!.<user>.cfg
   settings = {
-    max = {
-      Offset = -35;
-      RawInput = true;
-      MouseSpeed = 1.0;
-      FrameSync = "Unlimited";
-      DiscordRichPresence = true;
-      VolumeUniversal = 50;
-      Skin = "Shigetora's Skin";
-    };
+    Offset = -35;
+    RawInput = true;
+    MouseSpeed = 1.0;
+    FrameSync = "Unlimited";
+    DiscordRichPresence = true;
+    VolumeUniversal = 50;
+    # Username = "yourname";  # optional; never set Password here
   };
 
   # Global file: osu!.cfg (release stream, etc.)
@@ -174,7 +172,7 @@ programs.osu-stable = {
 
   # Direct download links to .osk archives
   skins = [
-    "https://circle-people.com/wp-content/Skins/Cookiezi/Cookiezi%2004.osk"
+    "https://example.com/CoolSkin.osk"
   ];
 };
 ```
