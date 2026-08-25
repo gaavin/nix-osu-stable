@@ -2,7 +2,7 @@
   
 # nix-osu-stable
 
-**Play osu! on NixOS** — native integration using Wine, Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works like osu lazer).
+**Play osu! stable on NixOS** — native integration using Wine, Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works similarly to osu lazer's offset reccomendation system).
 
 [![NixOS](https://img.shields.io/badge/NixOS-unstable-informational?logo=NixOS)](https://nixos.org)
 [![Flake](https://img.shields.io/badge/Flake-enabled-success)](https://nixos.wiki/wiki/Flakes)
