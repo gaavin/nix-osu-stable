@@ -23,6 +23,7 @@
   xz,
   findutils,
   procps,
+  unzip,
   gamemode,
   versions,
   pname ? "osu-wine",
@@ -36,6 +37,9 @@
   # Declarative osu!.*.cfg fragments (Key = value). Password is refused.
   gameSettingsFile ? null,
   globalSettingsFile ? null,
+  # Declarative content manifests (one beatmap set id / .osk URL per line).
+  beatmapsFile ? null,
+  skinsFile ? null,
   # Filename under $OSUPATH for per-user settings (Windows/Wine username).
   userConfigFileName ? null,
   environment ? { },
@@ -55,23 +59,22 @@ let
 
   osuDownloadUrl = versions.osuInstall.url;
 
-  mergedEnvironment =
-    {
-      WINENTSYNC = "1";
-      WINEFSYNC = "1";
-      WINEESYNC = "1";
-      WINE_AUDIO_DRIVER = "pipewire";
-      WINE_DISABLE_FULLSCREEN_HACK = "1";
-      vblank_mode = "0";
-      __GL_SYNC_TO_VBLANK = "0";
-      LC_ALL = "en_US.UTF-8";
-      LANG = "en_US.UTF-8";
-      WINEDLLOVERRIDES = "winemenubuilder.exe=;";
-      WINEDEBUG = "-all";
-    }
-    // environment
-    // optionalAttrs (preLaunchArgs != "") { PRE_LAUNCH_ARGS = preLaunchArgs; }
-    // optionalAttrs (postLaunchArgs != "") { POST_LAUNCH_ARGS = postLaunchArgs; };
+  mergedEnvironment = {
+    WINENTSYNC = "1";
+    WINEFSYNC = "1";
+    WINEESYNC = "1";
+    WINE_AUDIO_DRIVER = "pipewire";
+    WINE_DISABLE_FULLSCREEN_HACK = "1";
+    vblank_mode = "0";
+    __GL_SYNC_TO_VBLANK = "0";
+    LC_ALL = "en_US.UTF-8";
+    LANG = "en_US.UTF-8";
+    WINEDLLOVERRIDES = "winemenubuilder.exe=;";
+    WINEDEBUG = "-all";
+  }
+  // environment
+  // optionalAttrs (preLaunchArgs != "") { PRE_LAUNCH_ARGS = preLaunchArgs; }
+  // optionalAttrs (postLaunchArgs != "") { POST_LAUNCH_ARGS = postLaunchArgs; };
 
   packagedConfig = writeText "nix-osu-stable.env" (
     concatStringsSep "\n" (mapAttrsToList (k: v: "${k}=${escapeShellArg v}") mergedEnvironment) + "\n"
@@ -91,6 +94,31 @@ let
     text = builtins.readFile ./apply-game-settings.sh;
   };
 
+  exportGameSettings = writeShellApplication {
+    name = "osu-export-game-settings";
+    runtimeInputs = [
+      coreutils
+      gawk
+    ];
+    text = builtins.readFile ./export-game-settings.sh;
+  };
+
+  factoryUserSettings = ./factory-user-settings.cfg;
+
+  syncContent = writeShellApplication {
+    name = "osu-sync-content";
+    runtimeInputs = [
+      coreutils
+      curl
+      wget
+      gnugrep
+      gnused
+      findutils
+      unzip
+    ];
+    text = builtins.readFile ./sync-content.sh;
+  };
+
   script = writeShellApplication {
     name = pname;
     runtimeInputs = [
@@ -105,6 +133,7 @@ let
       xz
       findutils
       procps
+      unzip
       winetricks
       steam-run
     ]
@@ -121,10 +150,21 @@ let
       OSUPATH="$STATE_DIR/osu"
       YAWL_INSTALL_DIR="$STATE_DIR/yawl"
       CONFIG_FILE="''${OSU_STABLE_CONFIG:-${resolvedConfig}}"
-      GAME_SETTINGS_FILE="''${OSU_STABLE_GAME_SETTINGS:-${optionalString (gameSettingsFile != null) gameSettingsFile}}"
-      GLOBAL_SETTINGS_FILE="''${OSU_STABLE_GLOBAL_SETTINGS:-${optionalString (globalSettingsFile != null) globalSettingsFile}}"
-      USER_CONFIG_NAME="''${OSU_STABLE_USER_CONFIG_NAME:-${if userConfigFileName != null then userConfigFileName else ""}}"
+      GAME_SETTINGS_FILE="''${OSU_STABLE_GAME_SETTINGS:-${
+        optionalString (gameSettingsFile != null) gameSettingsFile
+      }}"
+      GLOBAL_SETTINGS_FILE="''${OSU_STABLE_GLOBAL_SETTINGS:-${
+        optionalString (globalSettingsFile != null) globalSettingsFile
+      }}"
+      BEATMAPS_FILE="''${OSU_STABLE_BEATMAPS:-${optionalString (beatmapsFile != null) beatmapsFile}}"
+      SKINS_FILE="''${OSU_STABLE_SKINS:-${optionalString (skinsFile != null) skinsFile}}"
+      USER_CONFIG_NAME="''${OSU_STABLE_USER_CONFIG_NAME:-${
+        if userConfigFileName != null then userConfigFileName else ""
+      }}"
       APPLY_GAME_SETTINGS="${applyGameSettings}/bin/osu-apply-game-settings"
+      EXPORT_GAME_SETTINGS="${exportGameSettings}/bin/osu-export-game-settings"
+      FACTORY_USER_SETTINGS="${factoryUserSettings}"
+      SYNC_CONTENT="${syncContent}/bin/osu-sync-content"
       WINE_OSU="${wine-osu}"
       YAWL_BIN="${yawl}/bin/yawl"
       PREFIX_SEED="${osu-wineprefix}"
@@ -474,6 +514,19 @@ let
         fi
       }
 
+      sync_declarative_content() {
+        mkdir -p "$OSUPATH"
+        if { [ -z "$BEATMAPS_FILE" ] || [ ! -r "$BEATMAPS_FILE" ]; } \
+          && { [ -z "$SKINS_FILE" ] || [ ! -r "$SKINS_FILE" ]; }; then
+          return 0
+        fi
+        info "Syncing declarative beatmaps/skins"
+        "$SYNC_CONTENT" \
+          "''${BEATMAPS_FILE:-/dev/null}" \
+          "''${SKINS_FILE:-/dev/null}" \
+          "$OSUPATH"
+      }
+
       ensure_osu() {
         local osu_exe="$OSUPATH/osu!.exe"
         local force="''${1:-}"
@@ -486,6 +539,7 @@ let
         if [ -s "$osu_exe" ]; then
           link_osu_drive
           apply_declarative_settings
+          sync_declarative_content
           return 0
         fi
 
@@ -523,6 +577,7 @@ let
           return 1
         }
         apply_declarative_settings
+        sync_declarative_content
       }
 
       # Unix path -> Wine Z:\… path (works under yawl/steam-run without relying on cwd).
@@ -661,7 +716,9 @@ let
         --info            Show paths
         --download-osu    Re-download latest osu! installer bootstrap
         --apply-settings  Merge declarative in-game settings into osu!.*.cfg
-        --export-settings Print non-secret keys from the user cfg (nix-friendly)
+        --export-settings Print keys that differ from factory defaults (nix-friendly)
+        --export-beatmaps Print installed beatmap set IDs as a nix snippet
+        --sync-content    Download missing beatmaps (catboy.best) and skins
         --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
         --fixrpc          Reinstall Discord Rich Presence bridge (rpc-bridge)
         --winecfg         Run winecfg
@@ -704,33 +761,44 @@ let
           info "Declarative settings applied."
           exit 0
           ;;
+        --sync-content)
+          prepare
+          ensure_osu
+          info "Declarative beatmaps/skins synced."
+          exit 0
+          ;;
         --export-settings)
           prepare
           ensure_osu
           user_cfg_name="''${USER_CONFIG_NAME:-osu!.$(whoami).cfg}"
           user_cfg="$OSUPATH/$user_cfg_name"
-          if [ ! -f "$user_cfg" ]; then
-            err "No user config at $user_cfg (change settings in-game and exit once)"
+          info "Overrides vs factory defaults from $user_cfg_name:"
+          "$EXPORT_GAME_SETTINGS" "$user_cfg" "$FACTORY_USER_SETTINGS"
+          exit 0
+          ;;
+        --export-beatmaps)
+          songs_dir="$OSUPATH/Songs"
+          if [ ! -d "$songs_dir" ]; then
+            err "No Songs directory at $songs_dir (install/launch osu! once first)"
             exit 1
           fi
-          info "Non-secret keys from $user_cfg_name:"
-          tr -d '\r' <"$user_cfg" \
-            | grep -Eiv '^[[:space:]]*(Password|SavePassword|Username|SaveUsername)[[:space:]]*=' \
-            | grep -E '^[[:space:]]*[^=#]+=' \
-            | sed -E 's/^[[:space:]]*([^=]+)=[[:space:]]*(.*)$/\1=\2/' \
-            | while IFS='=' read -r key val; do
-                key="$(printf '%s' "$key" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
-                val="$(printf '%s' "$val" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
-                [ -n "$key" ] || continue
-                case "$key" in
-                  h_*) continue ;;
-                esac
-                if printf '%s' "$val" | grep -Eq '^-?[0-9]+([.][0-9]+)?$'; then
-                  printf '    %s = %s;\n' "$key" "$val"
-                else
-                  printf '    %s = "%s";\n' "$key" "$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-                fi
-              done
+          ids="$(
+            {
+              # Extracted folders: "123 Artist - Title" or bare "123"
+              find "$songs_dir" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -printf '%f\n' 2>/dev/null \
+                | sed -nE 's/^([0-9]+)( .*|$)/\1/p'
+              # Pending archives from sync: "123.osz"
+              find "$songs_dir" -mindepth 1 -maxdepth 1 -type f -name '*.osz' -printf '%f\n' 2>/dev/null \
+                | sed -nE 's/^([0-9]+)\.[Oo][Ss][Zz]$/\1/p'
+            } | sort -n -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
+          )"
+          printf 'programs.osu-stable = {\n'
+          if [ -n "$ids" ]; then
+            printf '  beatmaps = [ %s ];\n' "$ids"
+          else
+            printf '  beatmaps = [ ];\n'
+          fi
+          printf '};\n'
           exit 0
           ;;
         --fixrpc)
@@ -838,10 +906,14 @@ symlinkJoin {
       osu-wineprefix
       rpc-bridge
       applyGameSettings
+      exportGameSettings
+      syncContent
       ;
     envConfig = resolvedConfig;
     gameSettingsFile = gameSettingsFile;
     globalSettingsFile = globalSettingsFile;
+    beatmapsFile = beatmapsFile;
+    skinsFile = skinsFile;
     inherit osuDownloadUrl;
   };
   meta = {

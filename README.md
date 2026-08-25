@@ -71,7 +71,9 @@ nix run github:gaavin/nix-osu-stable
     # location = "${config.xdg.dataHome}/nix-osu-stable";
     # gamemode = false;
     # preLaunchArgs = "mangohud";
-    # settings.Offset = -35;  # see "Declarative in-game settings"
+    # settings.Offset = -35;
+    # beatmaps = [ 75 ];
+    # skins = [ "https://example.com/MySkin.osk" ];
   };
 }
 ```
@@ -145,18 +147,46 @@ programs.osu-stable = {
 };
 ```
 
-Settings are merged on `home-manager switch` / activation and again every launch. Unmanaged keys — including a locally saved **Password** hash — are preserved. The module **refuses** declarative `Password`.
-
-Helpers:
+Settings are merged on `home-manager switch` / activation and again every launch. Unmanaged keys — including a locally saved **Password** hash — are preserved. The module **refuses** declarative `Password`. Only list overrides in your flake; `--export-settings` skips factory defaults and ephemeral session keys.
 
 ```bash
 osu-wine --apply-settings    # merge now
-osu-wine --export-settings   # print non-secret keys as nix attr lines
+osu-wine --export-settings   # print only keys that differ from factory defaults
 ```
 
 ---
 
-## 🔊 Optional: Low-Latency PipeWire
+## Beatmaps and skins
+
+Declarative content installs into the mutable game directory the same way settings do — on activation and every launch. Missing items are fetched; existing ones are left alone.
+
+```nix
+programs.osu-stable = {
+  enable = true;
+
+  # Beatmap *set* IDs (https://osu.ppy.sh/beatmapsets/<id>)
+  beatmaps = [
+    75
+    1011011
+  ];
+
+  # Direct download links to .osk archives
+  skins = [
+    "https://example.com/CoolSkin.osk"
+  ];
+};
+```
+
+Beatmaps are pulled from [catboy.best](https://catboy.best) (`/d/<id>`), extracted under `Songs/` as `{id} Artist - Title`. Skins are extracted under `Skins/` (name from `skin.ini` when present). Failed downloads are skipped with a warning so activation still succeeds.
+
+```bash
+osu-wine --sync-content      # fetch anything still missing
+osu-wine --export-beatmaps   # print installed set IDs as a nix snippet
+```
+
+---
+
+## Optional: Low-Latency PipeWire
 
 Default PipeWire works, but a locked quantum reduces buffer delay to ~2.7ms:
 
@@ -222,7 +252,9 @@ Start Discord first, then launch osu!. If broken after update: `osu-wine --fixrp
 | <span>osu-wine --help</span> | List all commands |
 | <span>osu-wine --info</span> | Show config / paths |
 | <span>osu-wine --apply-settings</span> | Merge declarative in-game settings into `osu!.*.cfg` |
-| <span>osu-wine --export-settings</span> | Print non-secret user cfg keys as nix attr lines |
+| <span>osu-wine --export-settings</span> | Print keys that differ from factory defaults as nix attr lines |
+| <span>osu-wine --export-beatmaps</span> | Print installed beatmap set IDs as a nix snippet |
+| <span>osu-wine --sync-content</span> | Download missing declarative beatmaps/skins |
 | <span>osu-wine --kill</span> | Force quit |
 | <span>osu-wine --fixrpc</span> | Reinstall Discord bridge |
 | <span>osu-wine --winecfg</span> | Wine settings |

@@ -26,12 +26,7 @@ let
     types.float
   ];
 
-  formatSettingsValue =
-    v:
-    if builtins.isBool v then
-      (if v then "1" else "0")
-    else
-      toString v;
+  formatSettingsValue = v: if builtins.isBool v then (if v then "1" else "0") else toString v;
 
   formatSettingsFile =
     name: attrs:
@@ -39,9 +34,9 @@ let
       concatStringsSep "\n" (mapAttrsToList (k: v: "${k} = ${formatSettingsValue v}") attrs) + "\n"
     );
 
-  secretSettingKeys = lib.filter (
-    k: lib.toLower k == "password"
-  ) ((lib.attrNames cfg.settings) ++ (lib.attrNames cfg.globalSettings));
+  secretSettingKeys = lib.filter (k: lib.toLower k == "password") (
+    (lib.attrNames cfg.settings) ++ (lib.attrNames cfg.globalSettings)
+  );
 in
 {
   options.programs.osu-stable = {
@@ -141,8 +136,9 @@ in
       description = ''
         Declarative osu! in-game settings merged into the per-user config
         (`osu!.<wine-user>.cfg` by default) on Home Manager activation and
-        every launch. Unmanaged keys (including a locally saved Password hash)
-        are preserved. Never set `Password` here.
+        every launch. Only list overrides vs factory defaults — use
+        `osu-wine --export-settings` to print them. Unmanaged keys (including
+        a locally saved Password hash) are preserved. Never set `Password` here.
       '';
     };
 
@@ -163,10 +159,36 @@ in
       type = types.str;
       default = "osu!.${config.home.username}.cfg";
       defaultText = literalExpression "\"osu!.\${config.home.username}.cfg\"";
-      example = "osu!.max.cfg";
+      example = "osu!.alice.cfg";
       description = ''
         Filename under the osu! install directory for per-user settings.
         Matches Wine's Windows username by default (see `home.username`).
+      '';
+    };
+
+    beatmaps = mkOption {
+      type = types.listOf (types.either types.int types.str);
+      default = [ ];
+      example = [
+        75
+        1011011
+      ];
+      description = ''
+        Beatmap set IDs to keep installed under `Songs/`. Missing sets are
+        downloaded from catboy.best on Home Manager activation and every launch.
+        Already-present folders (name starting with the set id) are skipped.
+        Failed downloads are warned and skipped so activation still succeeds.
+      '';
+    };
+
+    skins = mkOption {
+      type = types.listOf types.str;
+      default = [ ];
+      example = [ "https://example.com/MySkin.osk" ];
+      description = ''
+        Direct HTTPS URLs to `.osk` skin archives. Missing skins are downloaded
+        and extracted into `Skins/` on Home Manager activation and every launch.
+        Each URL is recorded after a successful install so it is not re-fetched.
       '';
     };
 
@@ -188,13 +210,25 @@ in
 
   config = mkIf cfg.enable (
     let
+      formatManifestFile =
+        name: entries:
+        pkgs.writeText name (
+          concatStringsSep "\n" (map toString entries) + lib.optionalString (entries != [ ]) "\n"
+        );
+
       gameSettingsFile =
-        if cfg.settings == { } then null else formatSettingsFile "osu-stable-user-settings.cfg" cfg.settings;
+        if cfg.settings == { } then
+          null
+        else
+          formatSettingsFile "osu-stable-user-settings.cfg" cfg.settings;
       globalSettingsFile =
         if cfg.globalSettings == { } then
           null
         else
           formatSettingsFile "osu-stable-global-settings.cfg" cfg.globalSettings;
+      beatmapsFile =
+        if cfg.beatmaps == [ ] then null else formatManifestFile "osu-stable-beatmaps.txt" cfg.beatmaps;
+      skinsFile = if cfg.skins == [ ] then null else formatManifestFile "osu-stable-skins.txt" cfg.skins;
 
       envFile = pkgs.writeText "nix-osu-stable.env" (
         concatStringsSep "\n" (
@@ -216,19 +250,24 @@ in
         }
         // lib.optionalAttrs (gameSettingsFile != null) { inherit gameSettingsFile; }
         // lib.optionalAttrs (globalSettingsFile != null) { inherit globalSettingsFile; }
+        // lib.optionalAttrs (beatmapsFile != null) { inherit beatmapsFile; }
+        // lib.optionalAttrs (skinsFile != null) { inherit skinsFile; }
       );
 
       applySettings = "${finalPackage.applyGameSettings}/bin/osu-apply-game-settings";
+      syncContent = "${finalPackage.syncContent}/bin/osu-sync-content";
       osuDir = "${cfg.location}/osu";
       userCfgPath = "${osuDir}/${cfg.userConfigFileName}";
       globalCfgPath = "${osuDir}/osu!.cfg";
     in
     {
-      home.packages =
-        [ finalPackage ]
-        ++ lib.optional cfg.arrpc pkgs.arrpc
-        ++ lib.optional (cfg.offsetCalculator.enable && cfg.offsetCalculator.package != null)
-          cfg.offsetCalculator.package;
+      home.packages = [
+        finalPackage
+      ]
+      ++ lib.optional cfg.arrpc pkgs.arrpc
+      ++ lib.optional (
+        cfg.offsetCalculator.enable && cfg.offsetCalculator.package != null
+      ) cfg.offsetCalculator.package;
 
       assertions = [
         {
@@ -255,6 +294,20 @@ in
             Keep hashed credentials local in the mutable osu!.*.cfg; do not put them in Nix.
           '';
         }
+        {
+          assertion = lib.all (
+            id:
+            let
+              s = toString id;
+            in
+            builtins.match "[0-9]+" s != null
+          ) cfg.beatmaps;
+          message = "programs.osu-stable.beatmaps entries must be numeric beatmap set IDs.";
+        }
+        {
+          assertion = lib.all (url: lib.hasPrefix "http://" url || lib.hasPrefix "https://" url) cfg.skins;
+          message = "programs.osu-stable.skins entries must be http(s) URLs to .osk files.";
+        }
       ];
 
       # Keep yawl wine paths in sync with the packaged wine-osu on every activation.
@@ -277,6 +330,18 @@ in
             ${lib.optionalString (gameSettingsFile != null) ''
               $DRY_RUN_CMD ${escapeShellArg applySettings} ${escapeShellArg gameSettingsFile} ${escapeShellArg userCfgPath}
             ''}
+          fi
+        ''
+      );
+
+      # Download missing beatmaps/skins when the install dir already exists.
+      home.activation.osuStableContent = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+        lib.optionalString (beatmapsFile != null || skinsFile != null) ''
+          if [ -d ${escapeShellArg osuDir} ]; then
+            $DRY_RUN_CMD ${escapeShellArg syncContent} \
+              ${escapeShellArg (if beatmapsFile != null then beatmapsFile else "/dev/null")} \
+              ${escapeShellArg (if skinsFile != null then skinsFile else "/dev/null")} \
+              ${escapeShellArg osuDir}
           fi
         ''
       );
