@@ -33,6 +33,11 @@
   useArrpc ? true,
   # Path to a shell-sourceable env file (HM generates one; package ships a default).
   configFile ? null,
+  # Declarative osu!.*.cfg fragments (Key = value). Password is refused.
+  gameSettingsFile ? null,
+  globalSettingsFile ? null,
+  # Filename under $OSUPATH for per-user settings (Windows/Wine username).
+  userConfigFileName ? null,
   environment ? { },
   preLaunchArgs ? "",
   postLaunchArgs ? "",
@@ -74,6 +79,8 @@ let
 
   resolvedConfig = if configFile != null then configFile else packagedConfig;
 
+  applyGameSettings = ./apply-game-settings.sh;
+
   script = writeShellApplication {
     name = pname;
     runtimeInputs = [
@@ -104,6 +111,10 @@ let
       OSUPATH="$STATE_DIR/osu"
       YAWL_INSTALL_DIR="$STATE_DIR/yawl"
       CONFIG_FILE="''${OSU_STABLE_CONFIG:-${resolvedConfig}}"
+      GAME_SETTINGS_FILE="''${OSU_STABLE_GAME_SETTINGS:-${optionalString (gameSettingsFile != null) gameSettingsFile}}"
+      GLOBAL_SETTINGS_FILE="''${OSU_STABLE_GLOBAL_SETTINGS:-${optionalString (globalSettingsFile != null) globalSettingsFile}}"
+      USER_CONFIG_NAME="''${OSU_STABLE_USER_CONFIG_NAME:-${if userConfigFileName != null then userConfigFileName else ""}}"
+      APPLY_GAME_SETTINGS="${applyGameSettings}"
       WINE_OSU="${wine-osu}"
       YAWL_BIN="${yawl}/bin/yawl"
       PREFIX_SEED="${osu-wineprefix}"
@@ -438,6 +449,21 @@ let
         info "osu! bootstrap ready ($(du -h "$dest" | cut -f1))"
       }
 
+      apply_declarative_settings() {
+        mkdir -p "$OSUPATH"
+        if [ -n "$GLOBAL_SETTINGS_FILE" ] && [ -r "$GLOBAL_SETTINGS_FILE" ]; then
+          info "Applying declarative global osu! settings"
+          sh "$APPLY_GAME_SETTINGS" "$GLOBAL_SETTINGS_FILE" "$OSUPATH/osu!.cfg"
+        fi
+        if [ -n "$GAME_SETTINGS_FILE" ] && [ -r "$GAME_SETTINGS_FILE" ]; then
+          local user_cfg_name user_cfg
+          user_cfg_name="''${USER_CONFIG_NAME:-osu!.$(whoami).cfg}"
+          user_cfg="$OSUPATH/$user_cfg_name"
+          info "Applying declarative user osu! settings -> $user_cfg_name"
+          sh "$APPLY_GAME_SETTINGS" "$GAME_SETTINGS_FILE" "$user_cfg"
+        fi
+      }
+
       ensure_osu() {
         local osu_exe="$OSUPATH/osu!.exe"
         local force="''${1:-}"
@@ -449,6 +475,7 @@ let
 
         if [ -s "$osu_exe" ]; then
           link_osu_drive
+          apply_declarative_settings
           return 0
         fi
 
@@ -485,6 +512,7 @@ let
           err "osu!.exe still missing under $OSUPATH"
           return 1
         }
+        apply_declarative_settings
       }
 
       # Unix path -> Wine Z:\… path (works under yawl/steam-run without relying on cwd).
@@ -622,6 +650,8 @@ let
         --help            Show this help
         --info            Show paths
         --download-osu    Re-download latest osu! installer bootstrap
+        --apply-settings  Merge declarative in-game settings into osu!.*.cfg
+        --export-settings Print non-secret keys from the user cfg (nix-friendly)
         --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
         --fixrpc          Reinstall Discord Rich Presence bridge (rpc-bridge)
         --winecfg         Run winecfg
@@ -656,6 +686,41 @@ let
           prepare
           ensure_osu force
           info "Done. Run ${pname} to launch."
+          exit 0
+          ;;
+        --apply-settings)
+          prepare
+          ensure_osu
+          info "Declarative settings applied."
+          exit 0
+          ;;
+        --export-settings)
+          prepare
+          ensure_osu
+          user_cfg_name="''${USER_CONFIG_NAME:-osu!.$(whoami).cfg}"
+          user_cfg="$OSUPATH/$user_cfg_name"
+          if [ ! -f "$user_cfg" ]; then
+            err "No user config at $user_cfg (change settings in-game and exit once)"
+            exit 1
+          fi
+          info "Non-secret keys from $user_cfg_name:"
+          tr -d '\r' <"$user_cfg" \
+            | grep -Eiv '^[[:space:]]*(Password|SavePassword|Username|SaveUsername)[[:space:]]*=' \
+            | grep -E '^[[:space:]]*[^=#]+=' \
+            | sed -E 's/^[[:space:]]*([^=]+)=[[:space:]]*(.*)$/\1=\2/' \
+            | while IFS='=' read -r key val; do
+                key="$(printf '%s' "$key" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+                val="$(printf '%s' "$val" | sed -E 's/^[[:space:]]+|[[:space:]]+$//g')"
+                [ -n "$key" ] || continue
+                case "$key" in
+                  h_*) continue ;;
+                esac
+                if printf '%s' "$val" | grep -Eq '^-?[0-9]+([.][0-9]+)?$'; then
+                  printf '    %s = %s;\n' "$key" "$val"
+                else
+                  printf '    %s = "%s";\n' "$key" "$(printf '%s' "$val" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+                fi
+              done
           exit 0
           ;;
         --fixrpc)
@@ -762,8 +827,11 @@ symlinkJoin {
       yawl
       osu-wineprefix
       rpc-bridge
+      applyGameSettings
       ;
     envConfig = resolvedConfig;
+    gameSettingsFile = gameSettingsFile;
+    globalSettingsFile = globalSettingsFile;
     inherit osuDownloadUrl;
   };
   meta = {

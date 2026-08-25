@@ -18,6 +18,30 @@ let
     ;
 
   cfg = config.programs.osu-stable;
+
+  settingsValueType = types.oneOf [
+    types.str
+    types.int
+    types.bool
+    types.float
+  ];
+
+  formatSettingsValue =
+    v:
+    if builtins.isBool v then
+      (if v then "1" else "0")
+    else
+      toString v;
+
+  formatSettingsFile =
+    name: attrs:
+    pkgs.writeText name (
+      concatStringsSep "\n" (mapAttrsToList (k: v: "${k} = ${formatSettingsValue v}") attrs) + "\n"
+    );
+
+  secretSettingKeys = lib.filter (
+    k: lib.toLower k == "password"
+  ) ((lib.attrNames cfg.settings) ++ (lib.attrNames cfg.globalSettings));
 in
 {
   options.programs.osu-stable = {
@@ -103,6 +127,49 @@ in
       description = "Raw lines appended to the generated env config file.";
     };
 
+    settings = mkOption {
+      type = types.attrsOf settingsValueType;
+      default = { };
+      example = {
+        Offset = -35;
+        RawInput = true;
+        MouseSpeed = 1.0;
+        FrameSync = "Unlimited";
+        DiscordRichPresence = true;
+        VolumeUniversal = 50;
+      };
+      description = ''
+        Declarative osu! in-game settings merged into the per-user config
+        (`osu!.<wine-user>.cfg` by default) on Home Manager activation and
+        every launch. Unmanaged keys (including a locally saved Password hash)
+        are preserved. Never set `Password` here.
+      '';
+    };
+
+    globalSettings = mkOption {
+      type = types.attrsOf settingsValueType;
+      default = { };
+      example = {
+        "_ReleaseStream" = "Stable40";
+      };
+      description = ''
+        Keys merged into the global `osu!.cfg` (release stream, etc.).
+        File-integrity `h_*` hashes are left alone unless you set them.
+        Never set `Password` here.
+      '';
+    };
+
+    userConfigFileName = mkOption {
+      type = types.str;
+      default = "osu!.${config.home.username}.cfg";
+      defaultText = literalExpression "\"osu!.\${config.home.username}.cfg\"";
+      example = "osu!.max.cfg";
+      description = ''
+        Filename under the osu! install directory for per-user settings.
+        Matches Wine's Windows username by default (see `home.username`).
+      '';
+    };
+
     offsetCalculator = {
       enable = mkEnableOption "osu-offset (watch running osu!.exe and recommend Offset from live hit error)";
 
@@ -121,6 +188,14 @@ in
 
   config = mkIf cfg.enable (
     let
+      gameSettingsFile =
+        if cfg.settings == { } then null else formatSettingsFile "osu-stable-user-settings.cfg" cfg.settings;
+      globalSettingsFile =
+        if cfg.globalSettings == { } then
+          null
+        else
+          formatSettingsFile "osu-stable-global-settings.cfg" cfg.globalSettings;
+
       envFile = pkgs.writeText "nix-osu-stable.env" (
         concatStringsSep "\n" (
           mapAttrsToList (k: v: "${k}=${escapeShellArg v}") cfg.environment
@@ -131,12 +206,22 @@ in
         + "\n"
       );
 
-      finalPackage = cfg.package.override {
-        location = cfg.location;
-        useGameMode = cfg.gamemode;
-        useArrpc = cfg.arrpc;
-        configFile = envFile;
-      };
+      finalPackage = cfg.package.override (
+        {
+          location = cfg.location;
+          useGameMode = cfg.gamemode;
+          useArrpc = cfg.arrpc;
+          configFile = envFile;
+          userConfigFileName = cfg.userConfigFileName;
+        }
+        // lib.optionalAttrs (gameSettingsFile != null) { inherit gameSettingsFile; }
+        // lib.optionalAttrs (globalSettingsFile != null) { inherit globalSettingsFile; }
+      );
+
+      applySettings = finalPackage.applyGameSettings;
+      osuDir = "${cfg.location}/osu";
+      userCfgPath = "${osuDir}/${cfg.userConfigFileName}";
+      globalCfgPath = "${osuDir}/osu!.cfg";
     in
     {
       home.packages =
@@ -163,6 +248,13 @@ in
             nix-osu-stable.packages.''${pkgs.stdenv.hostPlatform.system}.osu-offset.
           '';
         }
+        {
+          assertion = secretSettingKeys == [ ];
+          message = ''
+            programs.osu-stable.settings/globalSettings must not include Password.
+            Keep hashed credentials local in the mutable osu!.*.cfg; do not put them in Nix.
+          '';
+        }
       ];
 
       # Keep yawl wine paths in sync with the packaged wine-osu on every activation.
@@ -174,6 +266,20 @@ in
           printf '%s' '${finalPackage.wine-osu}' > '${cfg.location}/yawl/.wine-osu'
         ''}
       '';
+
+      # Merge declarative in-game settings when the install dir already exists.
+      home.activation.osuStableGameSettings = lib.hm.dag.entryAfter [ "writeBoundary" ] (
+        lib.optionalString (gameSettingsFile != null || globalSettingsFile != null) ''
+          if [ -d ${escapeShellArg osuDir} ]; then
+            ${lib.optionalString (globalSettingsFile != null) ''
+              $DRY_RUN_CMD ${pkgs.runtimeShell} ${escapeShellArg applySettings} ${escapeShellArg globalSettingsFile} ${escapeShellArg globalCfgPath}
+            ''}
+            ${lib.optionalString (gameSettingsFile != null) ''
+              $DRY_RUN_CMD ${pkgs.runtimeShell} ${escapeShellArg applySettings} ${escapeShellArg gameSettingsFile} ${escapeShellArg userCfgPath}
+            ''}
+          fi
+        ''
+      );
     }
   );
 }

@@ -71,6 +71,7 @@ nix run github:gaavin/nix-osu-stable
     # location = "${config.xdg.dataHome}/nix-osu-stable";
     # gamemode = false;
     # preLaunchArgs = "mangohud";
+    # settings.Offset = -35;  # see "Declarative in-game settings"
   };
 }
 ```
@@ -115,6 +116,43 @@ Then run `osu-offset` alongside `osu-wine`. It attaches to `osu!.exe`, reads **l
 ![osu-offset example output](assets/osu-offset-example.png)
 
 After a map with ≥ 50 timed hits, the dashboard shows the **Recommended Offset**, a hit-error histogram, play stats (map, hits, median/mean, UR), and an offset calibration slider with `recommended = current − median`. Set the value in **Options → Audio → Offset** and keep playing — it updates after every usable play.
+
+---
+
+## 🎛️ Declarative in-game settings
+
+Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://osu.ppy.sh/wiki/en/Client/Program_files/User_configuration_file):
+
+```nix
+programs.osu-stable = {
+  enable = true;
+
+  # Per-user file: ~/.local/share/nix-osu-stable/osu/osu!.<user>.cfg
+  settings = {
+    Offset = -35;
+    RawInput = true;
+    MouseSpeed = 1.0;
+    FrameSync = "Unlimited";
+    DiscordRichPresence = true;
+    VolumeUniversal = 50;
+    # Username = "yourname";  # optional; never set Password here
+  };
+
+  # Global file: osu!.cfg (release stream, etc.)
+  globalSettings = {
+    "_ReleaseStream" = "Stable40";
+  };
+};
+```
+
+Settings are merged on `home-manager switch` / activation and again every launch. Unmanaged keys — including a locally saved **Password** hash — are preserved. The module **refuses** declarative `Password`.
+
+Helpers:
+
+```bash
+osu-wine --apply-settings    # merge now
+osu-wine --export-settings   # print non-secret keys as nix attr lines
+```
 
 ---
 
