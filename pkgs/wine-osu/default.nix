@@ -23,12 +23,6 @@ stdenvNoCC.mkDerivation {
     mkdir -p "$out"
     # After unpack, sourceRoot is wine-osu/; copy into $out so $out/bin/wine exists.
     cp -a . "$out/"
-    # Overlay PE ntdll (BASS hook) and mmdevapi (2-period WASAPI). Unix ntdll.so
-    # is left alone so ntsync in the winello unixlib stays intact.
-    cp -f ${./overlay/i386-windows/ntdll.dll} "$out/lib/wine/i386-windows/ntdll.dll"
-    cp -f ${./overlay/x86_64-windows/ntdll.dll} "$out/lib/wine/x86_64-windows/ntdll.dll"
-    cp -f ${./overlay/i386-windows/mmdevapi.dll} "$out/lib/wine/i386-windows/mmdevapi.dll"
-    cp -f ${./overlay/x86_64-windows/mmdevapi.dll} "$out/lib/wine/x86_64-windows/mmdevapi.dll"
     runHook postInstall
   '';
 

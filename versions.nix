@@ -1,12 +1,10 @@
-# Pins referenced from osu-winello (NelloKudo/osu-winello), plus our
-# wine-osu latency overlay (see wine-osu-patches/). After CI produces a
-# tarball from that overlay, point wineOsu.url at our GitHub Release and
-# bump the hash — 11.12-3 is the last unpatched winello binary.
+# wine-osu is our WineBuilder tarball (winello-v11.12-2 + wine-osu-patches/).
+# Other pins still come from osu-winello (NelloKudo/osu-winello).
 {
   wineOsu = {
-    version = "11.12-3";
-    url = "https://github.com/NelloKudo/osu-winello/releases/download/winello-bins/wine-osu-winello-fonts-wow64-11.12-3-x86_64.tar.xz";
-    hash = "sha256-h+nnMZ1R1A/qK4DPi6exbXyfBwewyHjt6ZAqvSqoiUw=";
+    version = "11.12-2-latency";
+    url = "https://github.com/gaavin/nix-osu-stable/releases/download/wine-osu-11.12-2-latency/wine-osu-winello-fonts-wow64-11.12-2-x86_64.tar.xz";
+    hash = "sha256-9gIn6T0IThfA3SU4XSSgjhp2wH/Qx7whox2LPt/0kUY=";
   };
 
   yawl = {
