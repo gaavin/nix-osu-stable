@@ -22,6 +22,9 @@ osupath="${3:?osu install directory}"
 dry_run="${OSU_SYNC_DRY_RUN:-0}"
 UA='nix-osu-stable (https://github.com/gaavin/nix-osu-stable)'
 CANARY_ID=75
+# Concurrent files in one aria2 process. High enough to saturate several
+# mirrors, low enough to stay under typical burst limits (osu.direct is 10).
+BATCH_JOBS=12
 
 # Prefer no-video / CheeseGull-style endpoints when a mirror has one.
 BEATMAP_MIRRORS=(
@@ -72,8 +75,8 @@ aria2_flags=(
   --always-resume=false
   --use-head=false
   --enable-http-keep-alive=false
-  --max-tries=2
-  --retry-wait=1
+  --max-tries=3
+  --retry-wait=2
   --connect-timeout=8
   --timeout=45
   --user-agent="$UA"
@@ -94,10 +97,14 @@ aria2_get() {
     "$url"
 }
 
-# One aria2 process, all URLs at once (-j = count), -x5 each.
+# One aria2 process; all URLs queued, up to BATCH_JOBS in flight, -x5 each.
 aria2_batch() {
-  local input="$1" jobs="$2"
-  [ "$jobs" -gt 0 ] || return 0
+  local input="$1" count="$2" jobs
+  [ "$count" -gt 0 ] || return 0
+  jobs="$count"
+  if [ "$jobs" -gt "$BATCH_JOBS" ]; then
+    jobs="$BATCH_JOBS"
+  fi
   aria2c "${aria2_flags[@]}" \
     -j"$jobs" \
     --input-file="$input"
@@ -107,7 +114,8 @@ probe_one_mirror() {
   local template="$1" out="$2" url tmp
   url="${template//\{id\}/$CANARY_ID}"
   tmp="$(mktemp)"
-  curl -sS -L --connect-timeout 4 --max-time 8 \
+  # Only need zip magic; do not pull a full canary .osz.
+  curl -sS -L --connect-timeout 3 --max-time 6 --range 0-7 --max-filesize 8192 \
     -A "$UA" -o "$tmp" "$url" >/dev/null 2>&1 || true
   if [ "$(head -c 2 "$tmp" 2>/dev/null || true)" = "PK" ]; then
     printf '%s\n' "$template" >"$out"
@@ -250,17 +258,24 @@ read_skin_name() {
   return 1
 }
 
-beatmap_present() {
-  local id="$1" entry
-  [ -d "$songs_dir" ] || return 1
+# Numeric prefix of each Songs/ entry, filled by index_songs.
+declare -A have_set=()
+
+index_songs() {
+  local entry base
+  have_set=()
+  [ -d "$songs_dir" ] || return 0
   for entry in "$songs_dir"/*; do
     [ -e "$entry" ] || continue
-    case "$(basename "$entry")" in
-      "$id" | "$id "*) return 0 ;;
+    base="$(basename "$entry")"
+    case "$base" in
+      [0-9]*) have_set["${base%% *}"]=1 ;;
     esac
   done
-  [ -f "$songs_dir/${id}.osz" ] && return 0
-  return 1
+}
+
+beatmap_present() {
+  [ -n "${have_set[${1}]+x}" ]
 }
 
 install_beatmap_archive() {
@@ -412,6 +427,7 @@ run_beatmaps() {
   if [ "${#beatmap_ids[@]}" -eq 0 ]; then
     return 0
   fi
+  index_songs
   missing=()
   for id in "${beatmap_ids[@]}"; do
     if ! printf '%s' "$id" | grep -Eq '^[0-9]+$'; then
@@ -443,7 +459,8 @@ run_beatmaps() {
   fi
 
   mkdir -p "$songs_dir"
-  work="$(mktemp -d "$songs_dir/.nix-osu-stable-dl.XXXXXX")"
+  work="$(mktemp -d "${TMPDIR:-/tmp}/nix-osu-stable-dl.XXXXXX")"
+  trap 'rm -rf "$work"' EXIT
   remaining=("${missing[@]}")
   n="${#working_mirrors[@]}"
   round=0
@@ -456,7 +473,7 @@ run_beatmaps() {
     for id in "${remaining[@]}"; do
       template="${working_mirrors[$(((i + round) % n))]}"
       url="${template//\{id\}/$id}"
-      printf '%s\n  dir=%s\n  out=%s.osz\n' "$url" "$work" "$id" >>"$input"
+      printf '%s\n  dir=%s\n  out=%s.osz\n\n' "$url" "$work" "$id" >>"$input"
       i=$((i + 1))
     done
     aria2_batch "$input" "$jobs" || true
@@ -482,6 +499,7 @@ run_beatmaps() {
     fi
   done
   rm -rf "$work"
+  trap - EXIT
 }
 
 mkdir -p "$osupath"
