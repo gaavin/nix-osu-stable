@@ -1,17 +1,14 @@
-From f38d3c842e0991f85f81ac4c3e73361e4be9e163 Mon Sep 17 00:00:00 2001
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
 From: Max Power <me@gavinpower.dev>
-Date: Wed, 26 Aug 2026 20:11:29 -0230
-Subject: [PATCH 1/3] ntdll: Inline-hook BASS_Init in osu!.exe to kill the 30ms
+Date: Wed, 26 Aug 2026 20:24:00 -0230
+Subject: [PATCH] ntdll: Inline-hook BASS_Init in osu!.exe to kill the 30ms
  device buffer.
 
+osu!stable's bass.dll defaults to a 30ms WASAPI DEV_BUFFER and DirectSound
+in Audio Compatibility mode. Hook BASS after map (game-dir replacement is
+integrity-checked), strip DSOUND, set BASS_DEVICE_LATENCY, and clamp the
+device period/buffer to WINE_OSU_BASS_PERIOD frames (default 128).
 ---
- dlls/ntdll/Makefile.in  |   1 +
- dlls/ntdll/loader.c     |   6 +-
- dlls/ntdll/ntdll_misc.h |   1 +
- dlls/ntdll/osu_bass.c   | 384 ++++++++++++++++++++++++++++++++++++++++
- 4 files changed, 391 insertions(+), 1 deletion(-)
- create mode 100644 dlls/ntdll/osu_bass.c
-
 diff --git a/dlls/ntdll/Makefile.in b/dlls/ntdll/Makefile.in
 index 0a419e3751..562592793b 100644
 --- a/dlls/ntdll/Makefile.in
@@ -54,10 +51,10 @@ index 5cf6256641..1a29a037ea 100644
  extern void debug_init(void);
 diff --git a/dlls/ntdll/osu_bass.c b/dlls/ntdll/osu_bass.c
 new file mode 100644
-index 0000000000..2e4e5a5821
+index 0000000000..dcb2b9175a
 --- /dev/null
 +++ b/dlls/ntdll/osu_bass.c
-@@ -0,0 +1,384 @@
+@@ -0,0 +1,377 @@
 +/*
 + * osu! BASS mixer hijack — ntdll PE side.
 + *
@@ -230,8 +227,9 @@ index 0000000000..2e4e5a5821
 +    orig_BASS_SetConfig(BASS_CONFIG_DEV_BUFFER, ms * 2);
 +    orig_BASS_SetConfig(BASS_CONFIG_UPDATEPERIOD, ms);
 +    orig_BASS_SetConfig(BASS_CONFIG_VISTA_TRUEPOS, 1);
-+    TRACE("forced DEV_PERIOD=%u ms DEV_BUFFER=%u ms (frames=%u freq=%u)\n",
-+          ms, ms * 2, period_frames_cached, last_freq);
++    TRACE("forced DEV_PERIOD=%lu ms DEV_BUFFER=%lu ms (frames=%lu freq=%lu)\n",
++          (unsigned long)ms, (unsigned long)(ms * 2),
++          (unsigned long)period_frames_cached, (unsigned long)last_freq);
 +}
 +
 +static DWORD WINAPI hook_BASS_SetConfig(DWORD option, DWORD value)
@@ -262,7 +260,7 @@ index 0000000000..2e4e5a5821
 +
 +    flags &= ~BASS_DEVICE_DSOUND;
 +    flags |= BASS_DEVICE_LATENCY | BASS_DEVICE_FREQ;
-+    TRACE("BASS_Init device=%d freq=%u flags=0x%lx\n", device, freq, (unsigned long)flags);
++    TRACE("BASS_Init device=%d freq=%lu flags=0x%lx\n", device, (unsigned long)freq, (unsigned long)flags);
 +    ok = orig_BASS_Init(device, freq, flags, win, clsid);
 +    if (ok) apply_bass_device_config(freq);
 +    return ok;
@@ -420,12 +418,6 @@ index 0000000000..2e4e5a5821
 +    hook_bass_module(loaded->DllBase, loaded->BaseDllName);
 +}
 +
-+static void CALLBACK enum_loaded(LDR_DATA_TABLE_ENTRY *mod, void *context, BOOLEAN *stop)
-+{
-+    if (basename_is_bass(&mod->BaseDllName))
-+        hook_bass_module(mod->DllBase, &mod->BaseDllName);
-+}
-+
 +void osu_bass_init(void)
 +{
 +    void *cookie;
@@ -438,10 +430,5 @@ index 0000000000..2e4e5a5821
 +    period_frames_cached = period_frames();
 +    if (LdrRegisterDllNotification(0, bass_ldr_notify, NULL, &cookie) != STATUS_SUCCESS)
 +        WARN("LdrRegisterDllNotification failed\n");
-+    /* bass.dll is normally loaded after ntdll; this covers an already-mapped copy. */
-+    LdrEnumerateLoadedModules(NULL, enum_loaded, NULL);
-+    TRACE("watching for bass.dll (period=%u frames)\n", period_frames_cached);
++    TRACE("watching for bass.dll (period=%lu frames)\n", (unsigned long)period_frames_cached);
 +}
--- 
-2.55.0
-
