@@ -103,6 +103,14 @@ let
     text = builtins.readFile ./export-game-settings.sh;
   };
 
+  exportBeatmaps = writeShellApplication {
+    name = "osu-export-beatmaps";
+    runtimeInputs = [
+      coreutils
+    ];
+    text = builtins.readFile ./export-beatmaps.sh;
+  };
+
   factoryUserSettings = ./factory-user-settings.cfg;
 
   syncContent = writeShellApplication {
@@ -163,6 +171,7 @@ let
       }}"
       APPLY_GAME_SETTINGS="${applyGameSettings}/bin/osu-apply-game-settings"
       EXPORT_GAME_SETTINGS="${exportGameSettings}/bin/osu-export-game-settings"
+      EXPORT_BEATMAPS="${exportBeatmaps}/bin/osu-export-beatmaps"
       FACTORY_USER_SETTINGS="${factoryUserSettings}"
       SYNC_CONTENT="${syncContent}/bin/osu-sync-content"
       WINE_OSU="${wine-osu}"
@@ -717,7 +726,7 @@ let
         --download-osu    Re-download latest osu! installer bootstrap
         --apply-settings  Merge declarative in-game settings into osu!.*.cfg
         --export-settings Print keys that differ from factory defaults (nix-friendly)
-        --export-beatmaps Print installed beatmap set IDs as a nix snippet
+        --export-beatmaps Print installed beatmap set IDs as a nix beatmaps list
         --sync-content    Download missing beatmaps (catboy.best) and skins
         --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
         --fixrpc          Reinstall Discord Rich Presence bridge (rpc-bridge)
@@ -778,27 +787,8 @@ let
           ;;
         --export-beatmaps)
           songs_dir="$OSUPATH/Songs"
-          if [ ! -d "$songs_dir" ]; then
-            err "No Songs directory at $songs_dir (install/launch osu! once first)"
-            exit 1
-          fi
-          ids="$(
-            {
-              # Extracted folders: "123 Artist - Title" or bare "123"
-              find "$songs_dir" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -printf '%f\n' 2>/dev/null \
-                | sed -nE 's/^([0-9]+)( .*|$)/\1/p'
-              # Pending archives from sync: "123.osz"
-              find "$songs_dir" -mindepth 1 -maxdepth 1 -type f -name '*.osz' -printf '%f\n' 2>/dev/null \
-                | sed -nE 's/^([0-9]+)\.[Oo][Ss][Zz]$/\1/p'
-            } | sort -n -u | tr '\n' ' ' | sed 's/[[:space:]]*$//'
-          )"
-          printf 'programs.osu-stable = {\n'
-          if [ -n "$ids" ]; then
-            printf '  beatmaps = [ %s ];\n' "$ids"
-          else
-            printf '  beatmaps = [ ];\n'
-          fi
-          printf '};\n'
+          info "Installed beatmap set IDs from Songs/:"
+          "$EXPORT_BEATMAPS" "$songs_dir"
           exit 0
           ;;
         --fixrpc)
@@ -907,6 +897,7 @@ symlinkJoin {
       rpc-bridge
       applyGameSettings
       exportGameSettings
+      exportBeatmaps
       syncContent
       ;
     envConfig = resolvedConfig;

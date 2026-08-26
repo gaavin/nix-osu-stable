@@ -180,9 +180,11 @@ programs.osu-stable = {
 
 Beatmaps are pulled from [catboy.best](https://catboy.best) (`/d/<id>`), extracted under `Songs/` as `{id} Artist - Title`. Skins are extracted under `Skins/` (name from `skin.ini` when present). Failed downloads are skipped with a warning so activation still succeeds.
 
+Already have maps from in-game downloads? `--export-beatmaps` prints a `beatmaps = [ ... ];` snippet you can paste into the module — same idea as `--export-settings` for cfg overrides.
+
 ```bash
 osu-wine --sync-content      # fetch anything still missing
-osu-wine --export-beatmaps   # print installed set IDs as a nix snippet
+osu-wine --export-beatmaps   # print installed set IDs as a nix beatmaps list
 ```
 
 ---
@@ -254,7 +256,7 @@ Start Discord first, then launch osu!. If broken after update: `osu-wine --fixrp
 | <span>osu-wine --info</span> | Show config / paths |
 | <span>osu-wine --apply-settings</span> | Merge declarative in-game settings into `osu!.*.cfg` |
 | <span>osu-wine --export-settings</span> | Print keys that differ from factory defaults as nix attr lines |
-| <span>osu-wine --export-beatmaps</span> | Print installed beatmap set IDs as a nix snippet |
+| <span>osu-wine --export-beatmaps</span> | Print installed beatmap set IDs as a nix `beatmaps` list |
 | <span>osu-wine --sync-content</span> | Download missing declarative beatmaps/skins |
 | <span>osu-wine --kill</span> | Force quit |
 | <span>osu-wine --fixrpc</span> | Reinstall Discord bridge |
