@@ -1,0 +1,71 @@
+From cac31b8df1b472955bfad50eed2e7a8487e67ff8 Mon Sep 17 00:00:00 2001
+From: Max Power <me@gavinpower.dev>
+Date: Wed, 26 Aug 2026 20:11:29 -0230
+Subject: [PATCH 2/3] winepipewire: Report PipeWire graph+device delay in
+ GetPosition/GetStreamLatency.
+
+---
+ dlls/winepipewire.drv/pipewire.c | 33 ++++++++++++++++++++++++++++++--
+ 1 file changed, 31 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/winepipewire.drv/pipewire.c b/dlls/winepipewire.drv/pipewire.c
+index ff2a8ef5b3..86bddbcc18 100644
+--- a/dlls/winepipewire.drv/pipewire.c
++++ b/dlls/winepipewire.drv/pipewire.c
+@@ -2437,6 +2437,24 @@ static BOOL alloc_tmp_buffer(struct pipewire_stream *stream, SIZE_T bytes)
+     return TRUE;
+ }
+ 
++/* Bytes still in the PipeWire graph + device beyond Wine's own ring.
++ * pwt.queued is bytes; pwt.delay is ticks of pwt.rate (seconds = delay*num/denom). */
++static SIZE_T pipewire_graph_delay_bytes(struct pipewire_stream *stream)
++{
++    struct pw_time pwt;
++    INT64 bytes;
++
++    if (!stream->pw || !stream->frame_size || !stream->info.rate) return 0;
++    if (pw_stream_get_time_n(stream->pw, &pwt, sizeof(pwt)) < 0) return 0;
++
++    bytes = (INT64)pwt.queued;
++    if (pwt.rate.denom && pwt.delay > 0)
++        bytes += pwt.delay * (INT64)pwt.rate.num * (INT64)stream->info.rate
++                 * (INT64)stream->frame_size / (INT64)pwt.rate.denom;
++    if (bytes < 0) bytes = 0;
++    return (SIZE_T)bytes;
++}
++
+ static UINT32 pipewire_render_padding(struct pipewire_stream *stream)
+ {
+     return stream->held_bytes / stream->frame_size;
+@@ -2721,8 +2739,12 @@ static NTSTATUS pipewire_get_latency(void *args)
+         return STATUS_SUCCESS;
+     }
+     lat = stream->period_bytes / stream->frame_size;
+-    *params->latency = (lat * 10000000) / stream->info.rate + stream->def_period;
+-    TRACE("stream %p latency %u ms.\n", stream, (unsigned)(*params->latency / 10000));
++    *params->latency = (lat * 10000000) / stream->info.rate;
++    if (stream->info.rate && stream->frame_size)
++        *params->latency += (REFERENCE_TIME)pipewire_graph_delay_bytes(stream) * 10000000
++                            / ((REFERENCE_TIME)stream->info.rate * stream->frame_size);
++    TRACE("stream %p latency %u ms (mix period + graph/device delay).\n",
++          stream, (unsigned)(*params->latency / 10000));
+     pw_thread_loop_unlock(pw_loop_global);
+     params->result = S_OK;
+     return STATUS_SUCCESS;
+@@ -2779,6 +2801,13 @@ static NTSTATUS pipewire_get_position(void *args)
+     }
+ 
+     *params->pos = stream->clock_written - stream->held_bytes;
++    {
++        SIZE_T delay = pipewire_graph_delay_bytes(stream);
++        if (*params->pos > (INT64)delay)
++            *params->pos -= delay;
++        else
++            *params->pos = 0;
++    }
+ 
+     if (stream->share == AUDCLNT_SHAREMODE_EXCLUSIVE || params->device)
+         *params->pos /= stream->frame_size;
+-- 
+2.55.0
+

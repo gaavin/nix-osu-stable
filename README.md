@@ -87,17 +87,25 @@ osu-wine
 
 ---
 
-## 🎵 Essential: Set Audio Offset
+## 🎵 Audio Offset (Wine + BASS)
 
-Wine introduces latency. **Configure this in-game** or your hits will feel late:
+Stock wine-osu still needs about **−40 ms** of universal Offset. That is not PipeWire quantum. osu!stable's `bass.dll` defaults to a **30 ms WASAPI device buffer**, and Wine's play cursor reports “bytes handed to PipeWire” instead of “samples that have left the DAC”. This repo overlays three Wine patches on winello `11.12-2` to attack both:
+
+1. **ntdll inline-hooks `BASS_Init`** inside `osu!.exe` (game-dir `bass.dll` is left alone so the updater does not fight us). Strips DirectSound, sets `BASS_DEVICE_LATENCY`, clamps the device buffer to two periods of 128 frames (~6 ms).
+2. **`winepipewire.drv`** includes `pw_time.delay` in `GetPosition` / `GetStreamLatency` so BASS's compensation matches the DAC.
+3. **mmdevapi** uses 2 shared-mode periods instead of 3.
+
+`WINE_OSU_BASS_HOOK=1` and `WINE_OSU_BASS_PERIOD=128` are the launcher defaults. Set `WINE_OSU_BASS_HOOK=0` to disable the mixer hijack.
+
+The overlay lives in [`wine-osu-patches/`](./wine-osu-patches/). GitHub Actions (`.github/workflows/wine-osu.yml`) builds a WineBuilder tarball from it. **`versions.nix` still pins stock 11.12-3 until that artifact is hashed in.** After the pin flips, run `osu-offset` and set Offset from its recommendation — the target is as close to **0** as the DAC allows, not −40.
+
+Until then the old numbers still apply:
 
 <div>
-<strong>Options → Audio → Offset:</strong><br/>
+<strong>Options → Audio → Offset (stock 11.12-3):</strong><br/>
 • <strong>Normal mode:</strong> −40 to −35 ms<br/>
 • <strong>Audio compatibility mode:</strong> −25 ms
 </div>
-
-Every setup differs — watch the hit error meter and fine-tune.
 
 Or enable [osu-offset](https://github.com/gaavin/offset-calc-osu-stable) in the same Home Manager module (no extra flake input):
 
@@ -273,7 +281,7 @@ Opening `.osz` / `.osk` / `.osr` files or `osu://` links **reuses the running in
   logs/          Debug logs
 ```
 
-Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! itself auto-updates.
+Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! itself auto-updates. Latency patches for the next wine-osu pin are in [`wine-osu-patches/`](./wine-osu-patches/).
 
 ---
 
@@ -330,7 +338,7 @@ nix build github:gaavin/nix-osu-stable#osu-wine
 
 Built on [osu-winello](https://github.com/NelloKudo/osu-winello) stack:
 
-- [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu
+- [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu (our latency overlay: [`wine-osu-patches/`](./wine-osu-patches/))
 - [whrvt/yawl](https://github.com/whrvt/yawl) — Steam Runtime launcher
 - [EnderIce2/rpc-bridge](https://github.com/EnderIce2/rpc-bridge) — Discord RPC
 - [OpenAsar/arrpc](https://github.com/OpenAsar/arrpc) — Discord IPC

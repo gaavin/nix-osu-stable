@@ -1,0 +1,28 @@
+From 0cf923a0bc0f32ba68f6607e180c07a30fe1c7f0 Mon Sep 17 00:00:00 2001
+From: Max Power <me@gavinpower.dev>
+Date: Wed, 26 Aug 2026 20:11:29 -0230
+Subject: [PATCH 3/3] mmdevapi: Use 2 shared-mode periods for render instead of
+ 3.
+
+---
+ dlls/mmdevapi/client.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/dlls/mmdevapi/client.c b/dlls/mmdevapi/client.c
+index 718b98645d..49154f555f 100644
+--- a/dlls/mmdevapi/client.c
++++ b/dlls/mmdevapi/client.c
+@@ -124,8 +124,8 @@ static HRESULT adjust_timing(struct audio_client *client, const BOOLEAN force_de
+             *period = def_period;
+         else if (*period < min_period)
+             return AUDCLNT_E_INVALID_DEVICE_PERIOD;
+-        if (client->dataflow == eRender || *duration < 3 * *period)
+-            *duration = 3 * *period;
++        if (client->dataflow == eRender || *duration < 2 * *period)
++            *duration = 2 * *period;
+     } else {
+         const WAVEFORMATEXTENSIBLE *fmtex = (WAVEFORMATEXTENSIBLE *)fmt;
+         if (fmtex->Format.wFormatTag == WAVE_FORMAT_EXTENSIBLE &&
+-- 
+2.55.0
+

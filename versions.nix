@@ -1,5 +1,7 @@
-# Pins referenced from osu-winello (NelloKudo/osu-winello).
-# Bump these when upstream bumps wine-osu / yawl / prefix / mime bins.
+# Pins referenced from osu-winello (NelloKudo/osu-winello), plus our
+# wine-osu latency overlay (see wine-osu-patches/). After CI produces a
+# tarball from that overlay, point wineOsu.url at our GitHub Release and
+# bump the hash — 11.12-3 is the last unpatched winello binary.
 {
   wineOsu = {
     version = "11.12-3";

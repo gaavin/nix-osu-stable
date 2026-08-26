@@ -84,17 +84,7 @@ in
 
     environment = mkOption {
       type = types.attrsOf types.str;
-      default = {
-        WINENTSYNC = "1";
-        WINEFSYNC = "1";
-        WINEESYNC = "1";
-        WINE_AUDIO_DRIVER = "pipewire";
-        WINE_DISABLE_FULLSCREEN_HACK = "1";
-        vblank_mode = "0";
-        __GL_SYNC_TO_VBLANK = "0";
-        LC_ALL = "en_US.UTF-8";
-        LANG = "en_US.UTF-8";
-      };
+      default = { };
       example = {
         WINEFSYNC = "1";
         mesa_glthread = "true";
@@ -234,9 +224,26 @@ in
         if cfg.beatmaps == [ ] then null else formatManifestFile "osu-stable-beatmaps.txt" cfg.beatmaps;
       skinsFile = if cfg.skins == [ ] then null else formatManifestFile "osu-stable-skins.txt" cfg.skins;
 
+      launchEnvironment = {
+        WINENTSYNC = "1";
+        WINEFSYNC = "1";
+        WINEESYNC = "1";
+        WINE_AUDIO_DRIVER = "pipewire";
+        WINE_OSU_BASS_HOOK = "1";
+        WINE_OSU_BASS_PERIOD = "128";
+        WINE_DISABLE_FULLSCREEN_HACK = "1";
+        vblank_mode = "0";
+        __GL_SYNC_TO_VBLANK = "0";
+        LC_ALL = "en_US.UTF-8";
+        LANG = "en_US.UTF-8";
+        WINEDLLOVERRIDES = "winemenubuilder.exe=;";
+        WINEDEBUG = "-all";
+      }
+      // cfg.environment;
+
       envFile = pkgs.writeText "nix-osu-stable.env" (
         concatStringsSep "\n" (
-          mapAttrsToList (k: v: "${k}=${escapeShellArg v}") cfg.environment
+          mapAttrsToList (k: v: "${k}=${escapeShellArg v}") launchEnvironment
           ++ lib.optional (cfg.preLaunchArgs != "") "PRE_LAUNCH_ARGS=${escapeShellArg cfg.preLaunchArgs}"
           ++ lib.optional (cfg.postLaunchArgs != "") "POST_LAUNCH_ARGS=${escapeShellArg cfg.postLaunchArgs}"
           ++ lib.optional (cfg.extraConfig != "") cfg.extraConfig

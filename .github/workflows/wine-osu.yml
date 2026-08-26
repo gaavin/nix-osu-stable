@@ -1,0 +1,84 @@
+name: wine-osu
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    tags:
+      - "wine-osu*"
+    paths:
+      - "wine-osu-patches/**"
+      - ".github/workflows/wine-osu.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debloat GitHub CI
+        uses: endersonmenezes/free-disk-space@v3
+        with:
+          remove_android: true
+          remove_dotnet: true
+          remove_haskell: true
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: NelloKudo/WineBuilder
+          path: WineBuilder
+
+      - name: Overlay latency patches
+        run: |
+          mkdir -p WineBuilder/custompatches
+          cp -a wine-osu-patches/*.patch WineBuilder/custompatches/
+
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker
+
+      - name: Restore ccache
+        id: ccache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: WineBuilder/ccache
+          key: wine-osu-ccache-${{ github.run_id }}
+          restore-keys: |
+            wine-osu-ccache-
+
+      - name: Build wine-osu
+        working-directory: WineBuilder
+        env:
+          WINE_OSU: "true"
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Save ccache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: WineBuilder/ccache
+          key: ${{ steps.ccache-restore.outputs.cache-primary-key }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wine-osu
+          path: WineBuilder/*.tar.xz
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: wine-osu
+          path: ./artifacts/
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: ./artifacts/*.tar.xz
+          name: "${{ github.ref_name }}"

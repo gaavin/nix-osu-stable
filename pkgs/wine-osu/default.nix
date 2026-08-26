@@ -27,8 +27,8 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "Patched wine-osu (WineBuilder) for osu!stable, as used by osu-winello";
-    homepage = "https://github.com/NelloKudo/WineBuilder";
+    description = "Patched wine-osu (WineBuilder + nix-osu-stable latency overlay) for osu!stable";
+    homepage = "https://github.com/gaavin/nix-osu-stable";
     license = lib.licenses.lgpl21Plus;
     platforms = [ "x86_64-linux" ];
     sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
