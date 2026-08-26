@@ -175,9 +175,10 @@ in
       ];
       description = ''
         Beatmap set IDs to keep installed under `Songs/`. Missing sets are
-        downloaded from catboy.best on Home Manager activation and every launch.
-        Already-present folders (name starting with the set id) are skipped.
-        Failed downloads are warned and skipped so activation still succeeds.
+        downloaded from catboy.best (`/d/<id>n`, no-video) with aria2 (-x5)
+        on Home Manager activation and every launch. Already-present folders
+        (name starting with the set id) are skipped. Failed downloads are
+        warned and skipped so activation still succeeds.
         Use `osu-wine --export-beatmaps` to print installed set IDs as a nix list.
       '';
     };

@@ -7,8 +7,12 @@
 # Pass an empty/missing file to skip that category.
 #
 # Environment:
-#   OSU_BEATMAP_MIRROR  URL template with {id} (default: https://catboy.best/d/{id})
+#   OSU_BEATMAP_MIRROR  URL template with {id} (default: https://catboy.best/d/{id}n)
 #   OSU_SYNC_DRY_RUN=1  Log actions without writing
+#
+# Downloads use packaged aria2c (-x5). Catboy's /d/{id}n is the no-video
+# set archive (much smaller than /d/{id}); append n is their documented
+# CheeseGull-compatible download form.
 
 set -euo pipefail
 
@@ -16,7 +20,7 @@ beatmaps_file="${1:-}"
 skins_file="${2:-}"
 osupath="${3:?osu install directory}"
 
-mirror_template="${OSU_BEATMAP_MIRROR:-https://catboy.best/d/{id}}"
+mirror_template="${OSU_BEATMAP_MIRROR:-https://catboy.best/d/{id}n}"
 dry_run="${OSU_SYNC_DRY_RUN:-0}"
 
 songs_dir="$osupath/Songs"
@@ -30,31 +34,48 @@ warn() { printf 'nix-osu-stable: %s\n' "$*" >&2; }
 is_dry() { [ "$dry_run" = "1" ]; }
 
 download_to() {
-  local url="$1" dest="$2" tmp
+  local url="$1" dest="$2" tmp dir base
   if is_dry; then
     info "dry-run: download $url -> $dest"
     return 0
   fi
   tmp="$(mktemp "${dest}.XXXXXX.tmp")"
-  if curl -fsSL --retry 2 --retry-delay 1 --connect-timeout 15 --max-time 600 \
-    -o "$tmp" "$url"; then
-    :
-  elif wget -q -O "$tmp" "$url"; then
-    :
-  else
-    rm -f "$tmp"
+  dir="$(dirname "$tmp")"
+  base="$(basename "$tmp")"
+  # -x5 needs -s5 and a small min-split-size; default 20M would not split typical .osz files.
+  # Do not use --use-head: catboy's /d/ front-end often stalls on HEAD.
+  if ! aria2c -x5 -s5 \
+    --min-split-size=1M \
+    --file-allocation=none \
+    --allow-overwrite=true \
+    --auto-file-renaming=false \
+    --remove-control-file=true \
+    --always-resume=true \
+    --max-tries=5 \
+    --retry-wait=2 \
+    --connect-timeout=15 \
+    --timeout=60 \
+    --user-agent="nix-osu-stable (https://github.com/gaavin/nix-osu-stable)" \
+    --dir="$dir" \
+    --out="$base" \
+    --console-log-level=warn \
+    --summary-interval=0 \
+    --download-result=hide \
+    "$url"; then
+    rm -f "$tmp" "${tmp}.aria2"
     return 1
   fi
   if [ ! -s "$tmp" ]; then
-    rm -f "$tmp"
+    rm -f "$tmp" "${tmp}.aria2"
     return 1
   fi
   # .osz / .osk are zip archives
   if [ "$(head -c 2 "$tmp")" != "PK" ]; then
-    rm -f "$tmp"
+    rm -f "$tmp" "${tmp}.aria2"
     warn "download is not a zip archive: $url"
     return 1
   fi
+  rm -f "${tmp}.aria2"
   mv -f "$tmp" "$dest"
 }
 
