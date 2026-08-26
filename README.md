@@ -128,24 +128,47 @@ Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://o
 
 ```nix
 programs.osu-stable = {
-  enable = true;
+    enable = true;
+    environment.WINE_ENABLE_ABS_TABLET_HACK = "2";
+    offsetCalculator.enable = true;
 
-  # Per-user file: ~/.local/share/nix-osu-stable/osu/osu!.<user>.cfg
-  settings = {
-    Offset = -35;
-    RawInput = true;
-    MouseSpeed = 1.0;
-    FrameSync = "Unlimited";
-    DiscordRichPresence = true;
-    VolumeUniversal = 50;
-    # Username = "yourname";  # optional; never set Password here
-  };
+    settings = {
+      ChatChannels = "#osu #userlog";
+      VolumeEffect = 60;
+      AudioCompatibility = 1;
+      CursorSize = 1.1;
+      DimLevel = 100;
+      EditorHitAnimations = 1;
+      FrameSync = "Unlimited";
+      IHateHavingFun = 1;
+      IgnoreBeatmapSkins = 1;
+      Offset = -40;
+      PopupDuringGameplay = 0;
+      Skin = "Shigetora's Skin";
+      VolumeUniversal = 50;
+      keyOsuLeft = "E";
+      keyOsuRight = "R";
+      keyOsuSmoke = "T";
+    };
 
-  # Global file: osu!.cfg (release stream, etc.)
-  globalSettings = {
-    "_ReleaseStream" = "Stable40";
+    beatmaps = [
+      376552
+      377930
+      636839
+      1898232
+      2142914
+      2198943
+      2258243
+      2281545
+      2298941
+      2432962
+      2512831
+      2527269
+      2533966
+    ];
+
+    skins = [ "https://circle-people.com/wp-content/Skins/Cookiezi/Cookiezi%2004.osk" ];
   };
-};
 ```
 
 Settings are merged on `home-manager switch` / activation and again every launch. Unmanaged keys — including a locally saved **Password** hash — are preserved. The module **refuses** declarative `Password`. Only list overrides in your flake; `--export-settings` skips factory defaults and ephemeral session keys.
