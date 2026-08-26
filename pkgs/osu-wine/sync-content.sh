@@ -9,8 +9,9 @@
 #   OSU_SYNC_DRY_RUN=1  Log actions without writing
 #
 # Beatmaps are fetched with packaged aria2c. Built-in mirrors are probed at
-# runtime; every reachable mirror is used in parallel at -x5. First finished
-# valid .osz wins. Skins use a single URL at -x5.
+# runtime; missing sets are downloaded in one parallel aria2 run (-x5, -j=N)
+# spread across reachable mirrors. Failures retry on the next mirror.
+# Skins use a single URL at -x5.
 
 set -euo pipefail
 
@@ -21,7 +22,6 @@ osupath="${3:?osu install directory}"
 dry_run="${OSU_SYNC_DRY_RUN:-0}"
 UA='nix-osu-stable (https://github.com/gaavin/nix-osu-stable)'
 CANARY_ID=75
-MAP_JOBS=6
 
 # Prefer no-video / CheeseGull-style endpoints when a mirror has one.
 BEATMAP_MIRRORS=(
@@ -60,35 +60,47 @@ mirror_host() {
 # and Cloudflare returns 403.
 # --use-head=false: several mirrors stall or lie on HEAD.
 # --no-conf: ignore the user's aria2.conf.
+aria2_flags=(
+  --no-conf
+  -x5
+  -s5
+  --min-split-size=1M
+  --file-allocation=none
+  --allow-overwrite=true
+  --auto-file-renaming=false
+  --remove-control-file=true
+  --always-resume=false
+  --use-head=false
+  --enable-http-keep-alive=false
+  --max-tries=2
+  --retry-wait=1
+  --connect-timeout=8
+  --timeout=45
+  --user-agent="$UA"
+  --console-log-level=error
+  --summary-interval=0
+  --download-result=hide
+  --quiet=true
+)
+
 aria2_get() {
-  local dest="$1"
-  shift
-  local dir base split
+  local dest="$1" url="$2"
+  local dir base
   dir="$(dirname "$dest")"
   base="$(basename "$dest")"
-  split=$((5 * $#))
-  [ "$split" -lt 5 ] && split=5
-  aria2c --no-conf \
-    -x5 -s"$split" \
-    --min-split-size=1M \
-    --file-allocation=none \
-    --allow-overwrite=true \
-    --auto-file-renaming=false \
-    --remove-control-file=true \
-    --always-resume=false \
-    --use-head=false \
-    --enable-http-keep-alive=false \
-    --max-tries=3 \
-    --retry-wait=1 \
-    --connect-timeout=8 \
-    --timeout=45 \
-    --user-agent="$UA" \
+  aria2c "${aria2_flags[@]}" \
     --dir="$dir" \
     --out="$base" \
-    --console-log-level=warn \
-    --summary-interval=0 \
-    --download-result=hide \
-    "$@"
+    "$url"
+}
+
+# One aria2 process, all URLs at once (-j = count), -x5 each.
+aria2_batch() {
+  local input="$1" jobs="$2"
+  [ "$jobs" -gt 0 ] || return 0
+  aria2c "${aria2_flags[@]}" \
+    -j"$jobs" \
+    --input-file="$input"
 }
 
 probe_one_mirror() {
@@ -143,87 +155,19 @@ probe_mirrors() {
   info "using ${#working_mirrors[@]} beatmap mirror(s):$hosts"
 }
 
-# Download $dest from one or more URLs. Multiple URLs are raced in parallel,
-# each at -x5; the first finished zip wins and the rest are killed.
 download_to() {
-  local dest="$1"
-  shift
-  local url tmp work i winner pid st f
-  local -a pids
-
+  local dest="$1" url="$2" tmp
   if is_dry; then
-    for url in "$@"; do
-      info "dry-run: download $url -> $dest"
-    done
+    info "dry-run: download $url -> $dest"
     return 0
   fi
-
-  if [ "$#" -eq 0 ]; then
-    return 1
-  fi
-
-  if [ "$#" -eq 1 ]; then
-    tmp="$(mktemp "${dest}.XXXXXX.tmp")"
-    if aria2_get "$tmp" "$1" && is_zip "$tmp"; then
-      rm -f "${tmp}.aria2"
-      mv -f "$tmp" "$dest"
-      return 0
-    fi
-    rm -f "$tmp" "${tmp}.aria2"
-    return 1
-  fi
-
-  work="$(mktemp -d "${dest}.XXXXXX.race")"
-  pids=()
-  i=0
-  for url in "$@"; do
-    aria2_get "$work/p$i" "$url" >/dev/null 2>&1 &
-    pids+=("$!")
-    i=$((i + 1))
-  done
-
-  winner=""
-  while [ -z "$winner" ]; do
-    local alive=0
-    for i in "${!pids[@]}"; do
-      pid="${pids[$i]}"
-      [ "$pid" != "0" ] || continue
-      if kill -0 "$pid" 2>/dev/null; then
-        alive=1
-        continue
-      fi
-      st=0
-      wait "$pid" || st=$?
-      pids[$i]=0
-      f="$work/p$i"
-      if [ "$st" -eq 0 ] && is_zip "$f"; then
-        winner="$f"
-        break
-      fi
-    done
-    if [ -n "$winner" ]; then
-      break
-    fi
-    if [ "$alive" -eq 0 ]; then
-      break
-    fi
-    sleep 0.05
-  done
-
-  for i in "${!pids[@]}"; do
-    pid="${pids[$i]}"
-    if [ "$pid" != "0" ]; then
-      kill "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-    fi
-  done
-
-  if [ -n "$winner" ]; then
-    mv -f "$winner" "$dest"
-    rm -rf "$work"
+  tmp="$(mktemp "${dest}.XXXXXX.tmp")"
+  if aria2_get "$tmp" "$url" && is_zip "$tmp"; then
+    rm -f "${tmp}.aria2"
+    mv -f "$tmp" "$dest"
     return 0
   fi
-  rm -rf "$work"
+  rm -f "$tmp" "${tmp}.aria2"
   return 1
 }
 
@@ -319,58 +263,14 @@ beatmap_present() {
   return 1
 }
 
-install_beatmap() {
-  local id="$1" archive extract meta artist title dest
-  local -a urls
-  local template host_list
-
-  if ! printf '%s' "$id" | grep -Eq '^[0-9]+$'; then
-    warn "skipping invalid beatmap set id: $id"
-    return 0
-  fi
-  if beatmap_present "$id"; then
-    return 0
-  fi
-  if [ "${#working_mirrors[@]}" -eq 0 ]; then
-    return 0
-  fi
-
-  urls=()
-  host_list=""
-  for template in "${working_mirrors[@]}"; do
-    urls+=("${template//\{id\}/$id}")
-    host_list="$host_list $(mirror_host "$template")"
-  done
-
-  info "Downloading beatmap set $id"
-  info "  mirrors:$host_list"
-
-  if is_dry; then
-    info "dry-run: would install beatmap $id into $songs_dir"
-    return 0
-  fi
-
-  mkdir -p "$songs_dir"
-  archive="$(mktemp "$songs_dir/.nix-osu-stable-${id}.XXXXXX.osz")"
+install_beatmap_archive() {
+  local id="$1" archive="$2" extract meta artist title dest
   extract="$(mktemp -d "$songs_dir/.nix-osu-stable-extract-${id}.XXXXXX")"
-
-  cleanup_beatmap() {
-    rm -rf "$extract"
-    rm -f "$archive"
-  }
-
-  if ! download_to "$archive" "${urls[@]}"; then
-    warn "failed to download beatmap set $id (mirrors missing or network error)"
-    cleanup_beatmap
-    return 0
-  fi
-
   if ! unzip -q -o "$archive" -d "$extract"; then
     warn "failed to extract beatmap set $id"
-    cleanup_beatmap
+    rm -rf "$extract"
     return 0
   fi
-
   if meta="$(read_osu_meta "$extract")"; then
     artist="$(printf '%s' "$meta" | cut -f1)"
     title="$(printf '%s' "$meta" | cut -f2)"
@@ -381,17 +281,14 @@ install_beatmap() {
   artist="$(sanitize_component "$artist")"
   title="$(sanitize_component "$title")"
   dest="$songs_dir/${id} ${artist} - ${title}"
-
   if [ -e "$dest" ]; then
     info "Beatmap set $id already present as $(basename "$dest")"
-    cleanup_beatmap
+    rm -rf "$extract"
     return 0
   fi
-
   mkdir -p "$dest"
   find "$extract" -mindepth 1 -maxdepth 1 -exec mv -f {} "$dest/" \;
   rm -rf "$extract"
-  rm -f "$archive"
   info "Installed beatmap set $id -> $(basename "$dest")"
 }
 
@@ -509,38 +406,82 @@ beatmap_ids=()
 collect_beatmap() { beatmap_ids+=("$1"); }
 
 run_beatmaps() {
-  local id missing=0 running=0
+  local id i n round jobs work input template url hosts
+  local -a missing remaining next
+
   if [ "${#beatmap_ids[@]}" -eq 0 ]; then
     return 0
   fi
+  missing=()
   for id in "${beatmap_ids[@]}"; do
-    if ! beatmap_present "$id"; then
-      missing=1
-      break
+    if ! printf '%s' "$id" | grep -Eq '^[0-9]+$'; then
+      warn "skipping invalid beatmap set id: $id"
+      continue
     fi
+    beatmap_present "$id" || missing+=("$id")
   done
-  if [ "$missing" -eq 0 ]; then
+  if [ "${#missing[@]}" -eq 0 ]; then
     return 0
   fi
+
   probe_mirrors
   if [ "${#working_mirrors[@]}" -eq 0 ] && ! is_dry; then
     return 0
   fi
-  if is_dry || [ "${#beatmap_ids[@]}" -eq 1 ] || [ "$MAP_JOBS" -le 1 ]; then
-    for id in "${beatmap_ids[@]}"; do
-      install_beatmap "$id"
+
+  hosts=""
+  for template in "${working_mirrors[@]}"; do
+    hosts="$hosts $(mirror_host "$template")"
+  done
+
+  if is_dry; then
+    info "dry-run: download ${#missing[@]} set(s) across$hosts"
+    for id in "${missing[@]}"; do
+      info "dry-run: would install beatmap $id into $songs_dir"
     done
     return 0
   fi
-  for id in "${beatmap_ids[@]}"; do
-    if [ "$running" -ge "$MAP_JOBS" ]; then
-      wait -n || true
-      running=$((running - 1))
-    fi
-    install_beatmap "$id" &
-    running=$((running + 1))
+
+  mkdir -p "$songs_dir"
+  work="$(mktemp -d "$songs_dir/.nix-osu-stable-dl.XXXXXX")"
+  remaining=("${missing[@]}")
+  n="${#working_mirrors[@]}"
+  round=0
+  while [ "${#remaining[@]}" -gt 0 ] && [ "$round" -lt "$n" ]; do
+    jobs="${#remaining[@]}"
+    info "downloading $jobs set(s) across$hosts (round $((round + 1))/$n)"
+    input="$work/aria2.round-$round"
+    : >"$input"
+    i=0
+    for id in "${remaining[@]}"; do
+      template="${working_mirrors[$(((i + round) % n))]}"
+      url="${template//\{id\}/$id}"
+      printf '%s\n  dir=%s\n  out=%s.osz\n' "$url" "$work" "$id" >>"$input"
+      i=$((i + 1))
+    done
+    aria2_batch "$input" "$jobs" || true
+    next=()
+    for id in "${remaining[@]}"; do
+      rm -f "$work/${id}.osz.aria2"
+      if is_zip "$work/${id}.osz"; then
+        continue
+      fi
+      rm -f "$work/${id}.osz"
+      next+=("$id")
+    done
+    remaining=("${next[@]}")
+    round=$((round + 1))
   done
-  wait || true
+
+  for id in "${missing[@]}"; do
+    if is_zip "$work/${id}.osz"; then
+      install_beatmap_archive "$id" "$work/${id}.osz"
+      rm -f "$work/${id}.osz"
+    else
+      warn "failed to download beatmap set $id (mirrors missing or network error)"
+    fi
+  done
+  rm -rf "$work"
 }
 
 mkdir -p "$osupath"

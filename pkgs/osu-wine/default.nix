@@ -728,7 +728,7 @@ let
         --apply-settings  Merge declarative in-game settings into osu!.*.cfg
         --export-settings Print keys that differ from factory defaults (nix-friendly)
         --export-beatmaps Print installed beatmap set IDs as a nix beatmaps list
-        --sync-content    Download missing beatmaps (mirrors in parallel, aria2 -x5) and skins
+        --sync-content    Download missing beatmaps (mirrors, aria2 -x5) and skins
         --osuhandler <a>  Open .osz/.osk/.osr or osu:// (reuse running instance)
         --fixrpc          Reinstall Discord Rich Presence bridge (rpc-bridge)
         --winecfg         Run winecfg

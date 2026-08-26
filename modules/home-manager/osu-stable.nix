@@ -177,7 +177,8 @@ in
         Beatmap set IDs to keep installed under `Songs/`. Missing sets are
         downloaded on Home Manager activation and every launch. Reachable
         mirrors (catboy.best, osu.direct, nerinyan, beatconnect, sayobot) are
-        probed at runtime and used in parallel with aria2 (-x5 each).
+        probed at runtime; missing sets are downloaded in parallel with aria2
+        (-x5) spread across those mirrors.
         Already-present folders (name starting with the set id) are skipped.
         Failed downloads are warned and skipped so activation still succeeds.
         Use `osu-wine --export-beatmaps` to print installed set IDs as a nix list.
