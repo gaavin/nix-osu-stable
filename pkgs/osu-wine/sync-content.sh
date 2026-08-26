@@ -20,7 +20,9 @@ beatmaps_file="${1:-}"
 skins_file="${2:-}"
 osupath="${3:?osu install directory}"
 
-mirror_template="${OSU_BEATMAP_MIRROR:-https://catboy.best/d/{id}n}"
+# Quoted separately: `${var:-https://.../{id}n}` would close on the `}` in `{id}`.
+default_mirror='https://catboy.best/d/{id}n'
+mirror_template="${OSU_BEATMAP_MIRROR:-$default_mirror}"
 dry_run="${OSU_SYNC_DRY_RUN:-0}"
 
 songs_dir="$osupath/Songs"
@@ -181,7 +183,7 @@ install_beatmap() {
     return 0
   fi
 
-  url="$(printf '%s' "$mirror_template" | sed "s/{id}/$id/g")"
+  url="${mirror_template//\{id\}/$id}"
   info "Downloading beatmap set $id"
   info "  from: $url"
 
