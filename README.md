@@ -122,7 +122,7 @@ After a map with ≥ 50 timed hits, the dashboard shows the **Recommended Offset
 
 ---
 
-## 🎛️ Declarative in-game settings
+## 🎛️ Declarative in-game settings, beatmaps, and skins.
 
 Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://osu.ppy.sh/wiki/en/Client/Program_files/User_configuration_file):
 
@@ -179,27 +179,6 @@ osu-wine --export-settings   # print only keys that differ from factory defaults
 ```
 
 ---
-
-## Beatmaps and skins
-
-Declarative content installs into the mutable game directory the same way settings do — on activation and every launch. Missing items are fetched; existing ones are left alone.
-
-```nix
-programs.osu-stable = {
-  enable = true;
-
-  # Beatmap *set* IDs (https://osu.ppy.sh/beatmapsets/<id>)
-  beatmaps = [
-    75
-    1011011
-  ];
-
-  # Direct download links to .osk archives
-  skins = [
-    "https://example.com/CoolSkin.osk"
-  ];
-};
-```
 
 Beatmaps are pulled from [catboy.best](https://catboy.best) (`/d/<id>`), extracted under `Songs/` as `{id} Artist - Title`. Skins are extracted under `Skins/` (name from `skin.ini` when present). Failed downloads are skipped with a warning so activation still succeeds.
 
