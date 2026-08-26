@@ -174,7 +174,7 @@ osu-wine --export-settings   # print only keys that differ from factory defaults
 
 ---
 
-Beatmaps are pulled from [catboy.best](https://catboy.best) with packaged [aria2](https://aria2.github.io/) (`-x5`). The default URL is `/d/<id>n` — catboy's no-video set archive, which is the small CheeseGull-compatible form. Override with `OSU_BEATMAP_MIRROR` (use `/d/{id}` if you want videos). Sets extract under `Songs/` as `{id} Artist - Title`. Skins extract under `Skins/` (name from `skin.ini` when present). Failed downloads are skipped with a warning so activation still succeeds. A wiped `Songs/` directory re-fetches every listed set during `home-manager switch`.
+Beatmaps are fetched with packaged [aria2](https://aria2.github.io/). At sync time the script probes [catboy.best](https://catboy.best), [osu.direct](https://osu.direct), [nerinyan](https://nerinyan.moe), [beatconnect](https://beatconnect.io), and [sayobot](https://osu.sayobot.cn), then downloads each missing set from every reachable mirror in parallel (`-x5` per mirror). First finished archive wins. Prefer no-video endpoints when a mirror has one. Sets extract under `Songs/` as `{id} Artist - Title`. Skins extract under `Skins/` (name from `skin.ini` when present). Failed downloads are skipped with a warning so activation still succeeds. A wiped `Songs/` directory re-fetches every listed set during `home-manager switch`.
 
 Already have maps from in-game downloads? `--export-beatmaps` prints a `beatmaps = [ ... ];` snippet you can paste into the module — same idea as `--export-settings` for cfg overrides.
 
