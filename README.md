@@ -87,27 +87,11 @@ osu-wine
 
 ---
 
-## 🎵 Audio Offset (Wine + BASS)
+## 🎵 Audio Offset
 
-Stock wine-osu still needs about **−40 ms** of universal Offset. That is not PipeWire quantum. osu!stable's `bass.dll` defaults to a **30 ms WASAPI device buffer**, and Wine's play cursor reports “bytes handed to PipeWire” instead of “samples that have left the DAC”. This repo overlays three Wine patches on winello `11.12-2` to attack both:
+Wine and BASS are patched in this build so the mixer timestamps against the DAC instead of a 30 ms WASAPI buffer. Set **Options → Audio → Offset** to around **−5 ms**.
 
-1. **ntdll inline-hooks `BASS_Init`** inside `osu!.exe` (game-dir `bass.dll` is left alone so the updater does not fight us). Strips DirectSound, sets `BASS_DEVICE_LATENCY`, clamps the device buffer to two periods of 128 frames (~6 ms).
-2. **`winepipewire.drv`** includes `pw_time.delay` in `GetPosition` / `GetStreamLatency` so BASS's compensation matches the DAC.
-3. **mmdevapi** uses 2 shared-mode periods instead of 3.
-
-`WINE_OSU_BASS_HOOK=1` and `WINE_OSU_BASS_PERIOD=128` are the launcher defaults. Set `WINE_OSU_BASS_HOOK=0` to disable the mixer hijack.
-
-The overlay lives in [`wine-osu-patches/`](./wine-osu-patches/). GitHub Actions (`.github/workflows/wine-osu.yml`) builds a WineBuilder tarball from it. **`versions.nix` still pins stock 11.12-3 until that artifact is hashed in.** After the pin flips, run `osu-offset` and set Offset from its recommendation — the target is as close to **0** as the DAC allows, not −40.
-
-Until then the old numbers still apply:
-
-<div>
-<strong>Options → Audio → Offset (stock 11.12-3):</strong><br/>
-• <strong>Normal mode:</strong> −40 to −35 ms<br/>
-• <strong>Audio compatibility mode:</strong> −25 ms
-</div>
-
-Or enable [osu-offset](https://github.com/gaavin/offset-calc-osu-stable) in the same Home Manager module (no extra flake input):
+Enable [osu-offset](https://github.com/gaavin/offset-calc-osu-stable) to measure from live hit error:
 
 ```nix
 programs.osu-stable = {
@@ -116,11 +100,9 @@ programs.osu-stable = {
 };
 ```
 
-Then run `osu-offset` alongside `osu-wine`. It attaches to `osu!.exe`, reads **live hit error** from memory after each play, and prints a terminal dashboard with a recommended universal Offset for your current session (not old `.osr` replays). Leave it running while you play.
+Run `osu-offset` next to `osu-wine`. After a map with ≥ 50 timed hits it prints a recommended Offset (`current − median`). Leave it running; it updates after every usable play.
 
 ![osu-offset example output](assets/osu-offset-example.png)
-
-After a map with ≥ 50 timed hits, the dashboard shows the **Recommended Offset**, a hit-error histogram, play stats (map, hits, median/mean, UR), and an offset calibration slider with `recommended = current − median`. Set the value in **Options → Audio → Offset** and keep playing — it updates after every usable play.
 
 ---
 
@@ -144,7 +126,7 @@ programs.osu-stable = {
       FrameSync = "Unlimited";
       IHateHavingFun = 1;
       IgnoreBeatmapSkins = 1;
-      Offset = -40;
+      Offset = -5;
       PopupDuringGameplay = 0;
       Skin = "Shigetora's Skin";
       VolumeUniversal = 50;
