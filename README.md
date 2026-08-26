@@ -66,15 +66,9 @@ nix run github:gaavin/nix-osu-stable
 
   programs.osu-stable = {
     enable = true;
-    # Uncomment for custom options:
-    # offsetCalculator.enable = true;  # osu-offset CLI (no extra flake input)
-    # environment.WINE_ENABLE_ABS_TABLET_HACK = "2";  # Tablet fix
+    offsetCalculator.enable = true:
+    environment.WINE_ENABLE_ABS_TABLET_HACK = "2";  # Tablet fix
     # location = "${config.xdg.dataHome}/nix-osu-stable";
-    # gamemode = false;
-    # preLaunchArgs = "mangohud";
-    # settings.Offset = -35;
-    # beatmaps = [ 75 ];
-    # skins = [ "https://example.com/MySkin.osk" ];
   };
 }
 ```
