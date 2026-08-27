@@ -2,7 +2,7 @@
   
 # nix-osu-stable
 
-**Play osu! stable on NixOS** — native integration using a custom patched wine (hooks osu's audio engine and routes audio to DAC through pipewire, providing the best low latency gameplay), Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works similarly to osu lazer's offset reccomendation system).
+**Play osu! stable on NixOS** — native integration using a custom patched wine (hooks osu's audio engine and routes audio to DAC through pipewire, providing the best low latency gameplay), Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works similarly to osu lazer's offset recomendation system).
 This is for nixos, so naturally yes, beatmaps (downloaded from mirror), skins, settings, are all declarable.
 
 [![NixOS](https://img.shields.io/badge/NixOS-unstable-informational?logo=NixOS)](https://nixos.org)
