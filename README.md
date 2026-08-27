@@ -119,7 +119,6 @@ programs.osu-stable = {
     settings = {
       ChatChannels = "#osu #userlog";
       VolumeEffect = 60;
-      AudioCompatibility = 1;
       CursorSize = 1.1;
       DimLevel = 100;
       EditorHitAnimations = 1;
