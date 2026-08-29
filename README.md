@@ -106,6 +106,27 @@ Run `osu-offset` next to `osu-wine`. After a map with ≥ 50 timed hits it print
 
 ---
 
+## Display latency (Wayland)
+
+osu!stable presents with `wglSwapBuffers` (OpenGL), not a DXGI/Vulkan swapchain. The launcher prefers **native winewayland** whenever `WAYLAND_DISPLAY` is set:
+
+- Unsets `DISPLAY` so Wine does not pick XWayland (`mac,x11,wayland` would otherwise win).
+- Writes `HKCU\Software\Wine\Drivers` `Graphics=wayland,x11`.
+- winewayland binds the GL backbuffer on the **xdg_toplevel** (not a dummy-SHM parent + subsurface) so the compositor can KMS-scanout.
+- `wp_tearing_control` ASYNC is already on at swap interval 0.
+- NVIDIA `__GL_MaxFramesAllowed=1` and Mesa `mesa_glthread=false` to keep one frame in flight.
+
+Escape hatches:
+
+```nix
+programs.osu-stable.environment.WINE_OSU_USE_X11 = "1";          # X11 / XWayland
+programs.osu-stable.environment.WINE_WAYLAND_GL_TOPLEVEL = "0";  # old subsurface path
+```
+
+Visual latency dropping a compositor frame can change how hits *feel*. Re-run `osu-offset` after switching present paths. Compositor must support tearing-control for the async flip (KWin, Hyprland, gamescope; Mutter is weaker).
+
+---
+
 ## 🎛️ Declarative in-game settings, beatmaps, and skins.
 
 Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://osu.ppy.sh/wiki/en/Client/Program_files/User_configuration_file):
@@ -271,6 +292,8 @@ Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! 
 | Issue | Solution |
 |-------|----------|
 | Hits feel late | Enable `offsetCalculator`, run `osu-offset` while you play, and set the printed Offset |
+| Wayland present broken | `programs.osu-stable.environment.WINE_OSU_USE_X11 = "1";` then relaunch |
+| Want the old GL subsurface | `WINE_WAYLAND_GL_TOPLEVEL=0` |
 | Audio crackling | Raise PipeWire quantum to `256` |
 | First launch hangs | Normal (downloading Steam Runtime); ensure network access |
 | Won't start after update | `osu-wine --kill` then relaunch |

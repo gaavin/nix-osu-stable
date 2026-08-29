@@ -87,7 +87,7 @@ in
       default = { };
       example = {
         WINEFSYNC = "1";
-        mesa_glthread = "true";
+        WINE_OSU_USE_X11 = "1";
       };
       description = "Environment variables written to the generated config and sourced at launch.";
     };
