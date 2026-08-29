@@ -26,6 +26,8 @@
   procps,
   unzip,
   gamemode,
+  xorg,
+  xkeyboard_config,
   versions,
   pname ? "osu-wine",
   location ? "$HOME/.local/share/nix-osu-stable",
@@ -75,6 +77,10 @@ let
     mesa_glthread = "false";
     LC_ALL = "en_US.UTF-8";
     LANG = "en_US.UTF-8";
+    # winewayland/xkbcommon: NixOS has no /usr/share/X11/locale inside yawl.
+    XLOCALEDIR = "${xorg.libX11}/share/X11/locale";
+    XCOMPOSEFILE = "${xorg.libX11}/share/X11/locale/en_US.UTF-8/Compose";
+    XKB_CONFIG_ROOT = "${xkeyboard_config}/share/X11/xkb";
     WINEDLLOVERRIDES = "winemenubuilder.exe=;";
     WINEDEBUG = "-all";
   }
@@ -215,19 +221,11 @@ let
       info() { printf '\033[1;34mnix-osu-stable:\033[0m %s\n' "$*"; }
       err() { printf '\033[1;31mnix-osu-stable:\033[0m %s\n' "$*" >&2; }
 
-      # Wine explorer's default driver list is mac,x11,wayland — x11 wins whenever
-      # DISPLAY is set (XWayland). Empty DISPLAY so winewayland.drv is selected.
-      prefer_wayland_present() {
-        if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then
-          info "WINE_OSU_USE_X11=1: using X11/XWayland present"
-          return 0
-        fi
-        if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
-          return 0
-        fi
-        export DISPLAY=
-      }
-      prefer_wayland_present
+      # Wine explorer default is mac,x11,wayland. Keep host DISPLAY (pressure-vessel
+      # warns on DISPLAY=) and select winewayland via HKCU Graphics=wayland,x11.
+      if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then
+        info "WINE_OSU_USE_X11=1: using X11/XWayland present"
+      fi
 
       write_tool_wrappers() {
         mkdir -p "$STATE_DIR"
@@ -348,6 +346,7 @@ let
         }
 
         PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW:-}"
+        PRESSURE_VESSEL_FILESYSTEMS_RO="''${PRESSURE_VESSEL_FILESYSTEMS_RO:-}"
         PRESSURE_VESSEL_FILESYSTEMS_RW+="$(_mount_of "$STATE_DIR")"
         PRESSURE_VESSEL_FILESYSTEMS_RW+="$(_mount_of "$HOME")"
         PRESSURE_VESSEL_FILESYSTEMS_RW+="/mnt:/media:/run/media"
@@ -355,9 +354,22 @@ let
           PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH")"
           [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
         fi
+        for _gdir in /run/opengl-driver /run/opengl-driver-32; do
+          if [ -d "$_gdir" ]; then
+            PRESSURE_VESSEL_FILESYSTEMS_RO+=":$_gdir"
+          fi
+        done
+        if [ -d /run/opengl-driver ]; then
+          export PRESSURE_VESSEL_GRAPHICS_PROVIDER=/run/opengl-driver
+        fi
+        [ -n "''${XLOCALEDIR:-}" ] && [ -d "''${XLOCALEDIR}" ] \
+          && PRESSURE_VESSEL_FILESYSTEMS_RO+=":''${XLOCALEDIR}"
+        [ -n "''${XKB_CONFIG_ROOT:-}" ] && [ -d "''${XKB_CONFIG_ROOT}" ] \
+          && PRESSURE_VESSEL_FILESYSTEMS_RO+=":''${XKB_CONFIG_ROOT}"
         # arrpc/Discord may not be up yet; mounts refreshed again after ensure_arrpc.
         append_discord_ipc_mounts || true
         export PRESSURE_VESSEL_FILESYSTEMS_RW="''${PRESSURE_VESSEL_FILESYSTEMS_RW//\/:/:}"
+        export PRESSURE_VESSEL_FILESYSTEMS_RO="''${PRESSURE_VESSEL_FILESYSTEMS_RO//\/:/:}"
 
         if [ -f "$WINE_OSU/lib/wine/x86_64-unix/libgstfaad.so" ]; then
           export GST_PLUGIN_SYSTEM_PATH_1_0="$WINE_OSU/lib/wine/x86_64-unix"
@@ -418,7 +430,7 @@ let
         ensure_wayland_graphics_driver
       }
 
-      # Belt-and-suspenders with DISPLAY=: explorer tries Graphics=wayland first.
+      # Select winewayland without emptying DISPLAY (that breaks pressure-vessel).
       ensure_wayland_graphics_driver() {
         local marker="$WINEPREFIX_DIR/.nix-osu-stable-wayland-drv"
         if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then

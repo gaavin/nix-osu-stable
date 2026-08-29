@@ -110,8 +110,7 @@ Run `osu-offset` next to `osu-wine`. After a map with ≥ 50 timed hits it print
 
 osu!stable presents with `wglSwapBuffers` (OpenGL), not a DXGI/Vulkan swapchain. The launcher prefers **native winewayland** whenever `WAYLAND_DISPLAY` is set:
 
-- Unsets `DISPLAY` so Wine does not pick XWayland (`mac,x11,wayland` would otherwise win).
-- Writes `HKCU\Software\Wine\Drivers` `Graphics=wayland,x11`.
+- Writes `HKCU\Software\Wine\Drivers` `Graphics=wayland,x11` (keeps host `DISPLAY` so pressure-vessel is happy).
 - winewayland binds the GL backbuffer on the **xdg_toplevel** (not a dummy-SHM parent + subsurface) so the compositor can KMS-scanout.
 - `wp_tearing_control` ASYNC is already on at swap interval 0.
 - NVIDIA `__GL_MaxFramesAllowed=1` and Mesa `mesa_glthread=false` to keep one frame in flight.
