@@ -2,9 +2,9 @@
 # Other pins still come from osu-winello (NelloKudo/osu-winello).
 {
   wineOsu = {
-    version = "11.12-2-latency";
-    url = "https://github.com/gaavin/nix-osu-stable/releases/download/wine-osu-11.12-2-latency/wine-osu-winello-fonts-wow64-11.12-2-x86_64.tar.xz";
-    hash = "sha256-9gIn6T0IThfA3SU4XSSgjhp2wH/Qx7whox2LPt/0kUY=";
+    version = "11.12-2-wayland";
+    url = "https://github.com/gaavin/nix-osu-stable/releases/download/wine-osu-11.12-2-wayland/wine-osu-winello-fonts-wow64-11.12-2-x86_64.tar.xz";
+    hash = "sha256-yaLElrO3yA6eWgjYxXVdbuAvMEU920Ws6mgSS8THzB4=";
   };
 
   yawl = {
