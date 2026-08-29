@@ -1,0 +1,291 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Max Power <me@gavinpower.dev>
+Date: Sat, 29 Aug 2026 21:30:00 -0230
+Subject: [PATCH] HACK: winewayland: Present fullscreen GL on the xdg_toplevel.
+
+osu!stable is WGL SwapBuffers, not DXGI. Wine's default path puts the EGL
+window on a desync wl_subsurface over a dummy SHM parent, which blocks KMS
+direct scanout. Bind EGL to the toplevel, skip dummy SHM, mark the surface
+opaque, and attach wp_tearing_control ASYNC on that same surface so the
+compositor can async-flip the latest frame.
+
+WINE_WAYLAND_GL_TOPLEVEL=0 restores the subsurface path.
+
+diff --git a/dlls/winewayland.drv/opengl.c b/dlls/winewayland.drv/opengl.c
+index f2e8f91e78..6138823171 100644
+--- a/dlls/winewayland.drv/opengl.c
++++ b/dlls/winewayland.drv/opengl.c
+@@ -59,8 +59,10 @@ static struct wayland_gl_drawable *impl_from_opengl_drawable(struct opengl_drawa
+ static void wayland_drawable_destroy(struct opengl_drawable *base)
+ {
+     struct wayland_gl_drawable *gl = impl_from_opengl_drawable(base);
++    struct wayland_client_surface *client = impl_from_client_surface(base->client);
+     if (gl->wl_egl_window) wl_egl_window_destroy(gl->wl_egl_window);
+     wayland_client_surface_set_tearing_hint(base->client, FALSE);
++    wayland_client_surface_unbind_gl(client);
+ }
+ 
+ static EGLConfig egl_config_for_format(int format)
+@@ -112,7 +114,8 @@ static BOOL wayland_opengl_surface_create(struct client_surface *client, int for
+     opengl_drawable_map_buffer(&gl->base, GL_FRONT_AND_BACK, GL_BACK);
+     if (gl->base.stereo) opengl_drawable_map_buffer(&gl->base, GL_FRONT_RIGHT, GL_BACK_RIGHT);
+ 
+-    if (!(gl->wl_egl_window = wl_egl_window_create(surface->wl_surface, rect.right, rect.bottom))) goto err;
++    if (!(gl->wl_egl_window = wl_egl_window_create(wayland_client_surface_bind_gl(surface),
++                                                   rect.right, rect.bottom))) goto err;
+     if (!(gl->base.surface = funcs->p_eglCreateWindowSurface(egl->display, config, gl->wl_egl_window, attribs))) goto err;
+     set_client_surface(hwnd, surface);
+ 
+diff --git a/dlls/winewayland.drv/wayland_surface.c b/dlls/winewayland.drv/wayland_surface.c
+index 7ebffbf228..5ae32f23d0 100644
+--- a/dlls/winewayland.drv/wayland_surface.c
++++ b/dlls/winewayland.drv/wayland_surface.c
+@@ -26,6 +26,7 @@
+ 
+ #include <assert.h>
+ #include <stdlib.h>
++#include <string.h>
+ #include <unistd.h>
+ 
+ #include "waylanddrv.h"
+@@ -1302,12 +1303,88 @@ POINT map_point_from_surface(struct wayland_surface *surface, POINT point)
+     return point;
+ }
+ 
++static int prefer_toplevel_gl(void)
++{
++    static int enabled = -1;
++    const char *env;
++
++    if (enabled == -1)
++    {
++        /* Default on. WINE_WAYLAND_GL_TOPLEVEL=0 restores the subsurface path. */
++        enabled = !(env = getenv("WINE_WAYLAND_GL_TOPLEVEL")) || strcmp(env, "0");
++    }
++    return enabled;
++}
++
++static void wayland_surface_set_opaque(struct wayland_surface *surface)
++{
++    struct wl_region *region;
++
++    if (!surface || !surface->wl_surface) return;
++    if (!(region = wl_compositor_create_region(process_wayland.wl_compositor))) return;
++    /* Fully opaque: compositors can KMS-scanout instead of blending. */
++    wl_region_add(region, 0, 0, 0x7fffffff, 0x7fffffff);
++    wl_surface_set_opaque_region(surface->wl_surface, region);
++    wl_region_destroy(region);
++}
++
++struct wl_surface *wayland_client_surface_bind_gl(struct wayland_client_surface *client)
++{
++    HWND hwnd = client->client.hwnd;
++    HWND toplevel = NtUserGetAncestor(hwnd, GA_ROOT);
++    struct wayland_win_data *data;
++    struct wl_surface *wl = client->wl_surface;
++
++    if (!prefer_toplevel_gl() || hwnd != toplevel) return client->wl_surface;
++    if (!(data = wayland_win_data_get(hwnd))) return client->wl_surface;
++
++    if (data->wayland_surface && data->wayland_surface->wl_surface)
++    {
++        wl = data->wayland_surface->wl_surface;
++        client->present_on_toplevel = TRUE;
++        client->gl_owner = data->wayland_surface;
++        client->gl_owner->gl_owns_buffer = TRUE;
++        wayland_surface_set_opaque(client->gl_owner);
++
++        if (process_wayland.wp_content_type_manager_v1)
++        {
++            if (client->wp_content_type_v1)
++            {
++                wp_content_type_v1_destroy(client->wp_content_type_v1);
++                client->wp_content_type_v1 = NULL;
++            }
++            client->wp_content_type_v1 =
++                wp_content_type_manager_v1_get_surface_content_type(
++                    process_wayland.wp_content_type_manager_v1, wl);
++            if (client->wp_content_type_v1)
++                wp_content_type_v1_set_content_type(client->wp_content_type_v1,
++                                                    WP_CONTENT_TYPE_V1_TYPE_GAME);
++        }
++        TRACE("GL presents on toplevel hwnd=%p wl=%p\n", hwnd, wl);
++    }
++
++    wayland_win_data_release(data);
++    return wl;
++}
++
++void wayland_client_surface_unbind_gl(struct wayland_client_surface *client)
++{
++    if (client->gl_owner)
++    {
++        client->gl_owner->gl_owns_buffer = FALSE;
++        client->gl_owner = NULL;
++    }
++    client->present_on_toplevel = FALSE;
++}
++
+ static void wayland_client_surface_destroy(struct client_surface *client)
+ {
+     struct wayland_client_surface *surface = impl_from_client_surface(client);
+ 
+     TRACE("%s\n", debugstr_client_surface(client));
+ 
++    wayland_client_surface_unbind_gl(surface);
++
+     if (surface->wp_content_type_v1)
+         wp_content_type_v1_destroy(surface->wp_content_type_v1);
+     if (surface->wp_tearing_control_v1)
+@@ -1356,6 +1433,23 @@ static void wayland_client_surface_present(struct client_surface *client, HDC hd
+ {
+     struct wayland_client_surface *surface = impl_from_client_surface(client);
+     HWND hwnd = client->hwnd, toplevel = NtUserGetAncestor(hwnd, GA_ROOT);
++    struct wayland_win_data *data;
++
++    if (surface->present_on_toplevel)
++    {
++        /* Ack xdg configure without attaching dummy SHM (that blocks scanout). */
++        if ((data = wayland_win_data_get(toplevel)))
++        {
++            if (data->wayland_surface &&
++                data->wayland_surface->processing.serial &&
++                data->wayland_surface->processing.processed)
++                wayland_surface_reconfigure(data->wayland_surface);
++            wayland_win_data_release(data);
++        }
++        set_client_surface(hwnd, surface);
++        return;
++    }
++
+     ensure_window_surface_contents(toplevel);
+     set_client_surface(hwnd, surface);
+ }
+@@ -1363,17 +1457,25 @@ static void wayland_client_surface_present(struct client_surface *client, HDC hd
+ void wayland_client_surface_set_tearing_hint(struct client_surface *client, BOOL tear)
+ {
+     struct wayland_client_surface *surface;
++    struct wayland_win_data *data = NULL;
++    struct wl_surface *wl;
+ 
+     if (!client || !process_wayland.wp_tearing_control_manager_v1) return;
+     surface = impl_from_client_surface(client);
++    wl = surface->wl_surface;
++
++    if (surface->present_on_toplevel &&
++        (data = wayland_win_data_get(client->hwnd)) &&
++        data->wayland_surface && data->wayland_surface->wl_surface)
++        wl = data->wayland_surface->wl_surface;
+ 
+-    TRACE("client=%s tearing=%u\n", debugstr_client_surface(client), tear);
++    TRACE("client=%s tearing=%u wl=%p\n", debugstr_client_surface(client), tear, wl);
+ 
+-    if (tear && !surface->wp_tearing_control_v1)
++    if (tear && wl && !surface->wp_tearing_control_v1)
+     {
+         surface->wp_tearing_control_v1 =
+             wp_tearing_control_manager_v1_get_tearing_control(
+-                process_wayland.wp_tearing_control_manager_v1, surface->wl_surface);
++                process_wayland.wp_tearing_control_manager_v1, wl);
+         wp_tearing_control_v1_set_presentation_hint(
+             surface->wp_tearing_control_v1,
+             WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC);
+@@ -1383,6 +1485,8 @@ void wayland_client_surface_set_tearing_hint(struct client_surface *client, BOOL
+         wp_tearing_control_v1_destroy(surface->wp_tearing_control_v1);
+         surface->wp_tearing_control_v1 = NULL;
+     }
++
++    if (data) wayland_win_data_release(data);
+ }
+ 
+ static const struct client_surface_funcs wayland_client_surface_funcs =
+@@ -1495,6 +1599,18 @@ void wayland_client_surface_attach(struct wayland_client_surface *client, HWND t
+         return;
+     }
+ 
++    if (client->present_on_toplevel)
++    {
++        /* EGL owns the xdg_toplevel buffer; a subsurface would block scanout. */
++        if (client->wl_subsurface)
++        {
++            wl_subsurface_destroy(client->wl_subsurface);
++            client->wl_subsurface = NULL;
++        }
++        client->toplevel = toplevel;
++        return;
++    }
++
+     if (client->toplevel != toplevel)
+     {
+         wayland_client_surface_attach(client, NULL);
+@@ -1553,9 +1669,10 @@ void wayland_surface_ensure_contents(struct wayland_surface *surface)
+                      (surface->content_width != width ||
+                       surface->content_height != height);
+ 
+-    TRACE("surface=%p hwnd=%p needs_contents=%d\n",
+-          surface, surface->hwnd, needs_contents);
++    TRACE("surface=%p hwnd=%p needs_contents=%d gl_owns=%d\n",
++          surface, surface->hwnd, needs_contents, surface->gl_owns_buffer);
+ 
++    if (surface->gl_owns_buffer) return;
+     if (!needs_contents) return;
+ 
+     if (wayland_surface_reconfigure(surface))
+diff --git a/dlls/winewayland.drv/waylanddrv.h b/dlls/winewayland.drv/waylanddrv.h
+index c0a5217e1d..e6218e6afc 100644
+--- a/dlls/winewayland.drv/waylanddrv.h
++++ b/dlls/winewayland.drv/waylanddrv.h
+@@ -335,6 +335,8 @@ struct wayland_window_config
+     BOOL resizeable;
+ };
+ 
++struct wayland_surface;
++
+ struct wayland_client_surface
+ {
+     struct client_surface client;
+@@ -344,6 +346,9 @@ struct wayland_client_surface
+     struct wp_viewport *wp_viewport;
+     struct wp_content_type_v1 *wp_content_type_v1;
+     struct wp_tearing_control_v1 *wp_tearing_control_v1;
++    /* EGL/Vulkan commits to the xdg_toplevel wl_surface (scanout path). */
++    BOOL present_on_toplevel;
++    struct wayland_surface *gl_owner; /* borrowed; window destroy releases client first */
+ };
+ 
+ extern struct wayland_client_surface *impl_from_client_surface(struct client_surface *client);
+@@ -395,6 +400,8 @@ struct wayland_surface
+     struct wayland_window_config window;
+     int content_width, content_height;
+     HCURSOR hcursor;
++    /* GL/Vulkan presents onto this surface; skip dummy SHM (blocks KMS scanout). */
++    BOOL gl_owns_buffer;
+ };
+ 
+ /**********************************************************************
+@@ -435,6 +442,8 @@ RECT map_rect_from_surface(struct wayland_surface *surface, RECT rect);
+ POINT map_point_from_surface(struct wayland_surface *surface, POINT point);
+ void wayland_client_surface_attach(struct wayland_client_surface *client, HWND toplevel);
+ void wayland_client_surface_set_tearing_hint(struct client_surface *client, BOOL tear);
++struct wl_surface *wayland_client_surface_bind_gl(struct wayland_client_surface *client);
++void wayland_client_surface_unbind_gl(struct wayland_client_surface *client);
+ void wayland_surface_ensure_contents(struct wayland_surface *surface);
+ void wayland_surface_set_title(struct wayland_surface *surface, LPCWSTR title);
+ void wayland_surface_assign_icon(struct wayland_surface *surface);
+diff --git a/dlls/winewayland.drv/window.c b/dlls/winewayland.drv/window.c
+index 70bcf95b6a..0b3d0e1905 100644
+--- a/dlls/winewayland.drv/window.c
++++ b/dlls/winewayland.drv/window.c
+@@ -1030,7 +1030,11 @@ BOOL set_window_surface_contents(HWND hwnd, struct wayland_shm_buffer *shm_buffe
+ 
+     if ((wayland_surface = data->wayland_surface))
+     {
+-        if (wayland_surface_reconfigure(wayland_surface))
++        if (wayland_surface->gl_owns_buffer)
++        {
++            TRACE("skip GDI attach, GL owns hwnd=%p\n", hwnd);
++        }
++        else if (wayland_surface_reconfigure(wayland_surface))
+         {
+             wayland_surface_attach_shm(wayland_surface, shm_buffer, damage_region);
+             wl_surface_commit(wayland_surface->wl_surface);

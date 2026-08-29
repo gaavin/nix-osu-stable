@@ -70,6 +70,9 @@ let
     WINE_DISABLE_FULLSCREEN_HACK = "1";
     vblank_mode = "0";
     __GL_SYNC_TO_VBLANK = "0";
+    __GL_MaxFramesAllowed = "1";
+    __GL_THREADED_OPTIMIZATIONS = "0";
+    mesa_glthread = "false";
     LC_ALL = "en_US.UTF-8";
     LANG = "en_US.UTF-8";
     WINEDLLOVERRIDES = "winemenubuilder.exe=;";
@@ -211,6 +214,20 @@ let
       # Use printf (not echo -e): Wine paths like O:\nix-... contain \n escapes.
       info() { printf '\033[1;34mnix-osu-stable:\033[0m %s\n' "$*"; }
       err() { printf '\033[1;31mnix-osu-stable:\033[0m %s\n' "$*" >&2; }
+
+      # Wine explorer's default driver list is mac,x11,wayland — x11 wins whenever
+      # DISPLAY is set (XWayland). Empty DISPLAY so winewayland.drv is selected.
+      prefer_wayland_present() {
+        if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then
+          info "WINE_OSU_USE_X11=1: using X11/XWayland present"
+          return 0
+        fi
+        if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
+          return 0
+        fi
+        export DISPLAY=
+      }
+      prefer_wayland_present()
 
       write_tool_wrappers() {
         mkdir -p "$STATE_DIR"
@@ -398,6 +415,28 @@ let
           touch "$marker"
         fi
         link_osu_drive
+        ensure_wayland_graphics_driver
+      }
+
+      # Belt-and-suspenders with DISPLAY=: explorer tries Graphics=wayland first.
+      ensure_wayland_graphics_driver() {
+        local marker="$WINEPREFIX_DIR/.nix-osu-stable-wayland-drv"
+        if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then
+          if [ -f "$marker" ]; then
+            "$WINE" reg add 'HKCU\Software\Wine\Drivers' /v Graphics /t REG_SZ /d 'x11,wayland' /f \
+              >/dev/null 2>&1 || true
+            rm -f "$marker"
+          fi
+          return 0
+        fi
+        [ -n "''${WAYLAND_DISPLAY:-}" ] || return 0
+        if [ -f "$marker" ]; then
+          return 0
+        fi
+        info "Preferring winewayland.drv (HKCU\\Software\\Wine\\Drivers Graphics=wayland,x11)"
+        "$WINE" reg add 'HKCU\Software\Wine\Drivers' /v Graphics /t REG_SZ /d 'wayland,x11' /f \
+          >/dev/null 2>&1 || true
+        touch "$marker"
       }
 
       # ProgIDs for .osz/.osk/.osr and osu:// (O:\osu!.exe — matches link_osu_drive).
