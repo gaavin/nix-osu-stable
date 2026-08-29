@@ -354,14 +354,8 @@ let
           PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH")"
           [ -d "$OSUPATH/Songs" ] && PRESSURE_VESSEL_FILESYSTEMS_RW+=":$(realpath "$OSUPATH/Songs")"
         fi
-        for _gdir in /run/opengl-driver /run/opengl-driver-32; do
-          if [ -d "$_gdir" ]; then
-            PRESSURE_VESSEL_FILESYSTEMS_RO+=":$_gdir"
-          fi
-        done
-        if [ -d /run/opengl-driver ]; then
-          export PRESSURE_VESSEL_GRAPHICS_PROVIDER=/run/opengl-driver
-        fi
+        # Do not set PRESSURE_VESSEL_GRAPHICS_PROVIDER=/run/opengl-driver — NixOS
+        # that path is a driver symlink farm, not an FHS root with ld.so.cache.
         [ -n "''${XLOCALEDIR:-}" ] && [ -d "''${XLOCALEDIR}" ] \
           && PRESSURE_VESSEL_FILESYSTEMS_RO+=":''${XLOCALEDIR}"
         [ -n "''${XKB_CONFIG_ROOT:-}" ] && [ -d "''${XKB_CONFIG_ROOT}" ] \
