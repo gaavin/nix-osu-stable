@@ -227,7 +227,7 @@ let
         fi
         export DISPLAY=
       }
-      prefer_wayland_present()
+      prefer_wayland_present
 
       write_tool_wrappers() {
         mkdir -p "$STATE_DIR"
