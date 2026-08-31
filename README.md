@@ -1,5 +1,8 @@
 <div align="center">
-  
+
+# DO NOT USE THIS PACKAGE
+# THERE ARE BANNABLE PATCHES IN THIS WINE BUILD, WHICH WILL BE REMOVED SOON
+
 # nix-osu-stable
 
 **Play osu! stable on NixOS** — native integration using a custom patched wine (hooks osu's audio engine and routes audio to DAC through pipewire, providing the best low latency gameplay) (also enables direct scanout in opengl mode), Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works similarly to osu lazer's offset recomendation system).
