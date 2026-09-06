@@ -67,8 +67,6 @@ let
     WINEFSYNC = "1";
     WINEESYNC = "1";
     WINE_AUDIO_DRIVER = "pipewire";
-    WINE_OSU_BASS_HOOK = "1";
-    WINE_OSU_BASS_PERIOD = "128";
     WINE_DISABLE_FULLSCREEN_HACK = "1";
     vblank_mode = "0";
     __GL_SYNC_TO_VBLANK = "0";
@@ -226,6 +224,34 @@ let
       if [ "''${WINE_OSU_USE_X11:-}" = "1" ]; then
         info "WINE_OSU_USE_X11=1: using X11/XWayland present"
       fi
+
+      # Port of winello detectAbsoluteTabletHack: OTD absolute mode on Wayland.
+      detect_absolute_tablet_hack() {
+        [ -n "''${WINE_ENABLE_ABS_TABLET_HACK+x}" ] && return 1
+        if [ "''${XDG_SESSION_TYPE:-}" != "wayland" ] && [ -z "''${WAYLAND_DISPLAY:-}" ]; then
+          return 1
+        fi
+        [ -r /proc/bus/input/devices ] || return 1
+        grep -q 'Name="OpenTabletDriver Virtual Tablet"' /proc/bus/input/devices || return 1
+        local settings_json
+        for settings_json in \
+          "$HOME/.config/OpenTabletDriver/settings.json" \
+          "$HOME/.var/app/net.opentabletdriver.OpenTabletDriver/config/OpenTabletDriver/settings.json"; do
+          [ -r "$settings_json" ] || continue
+          grep -Eq '"Enable"[[:space:]]*:[[:space:]]*true' "$settings_json" &&
+            grep -Eq '"Path"[[:space:]]*:[[:space:]]*".*\.AbsoluteMode"' "$settings_json" &&
+            return 0
+        done
+        return 1
+      }
+
+      maybe_enable_otd_absolute() {
+        if detect_absolute_tablet_hack; then
+          export WINE_ENABLE_ABS_TABLET_HACK=2
+          info "OpenTabletDriver absolute mode detected, enabling WINE_ENABLE_ABS_TABLET_HACK=2."
+          info "If the mouse misbehaves, set WINE_ENABLE_ABS_TABLET_HACK=0 in programs.osu-stable.environment."
+        fi
+      }
 
       write_tool_wrappers() {
         mkdir -p "$STATE_DIR"
@@ -645,6 +671,7 @@ let
       }
 
       launch_osu() {
+        maybe_enable_otd_absolute
         local -a pre_args=()
         if [ -n "''${PRE_LAUNCH_ARGS:-}" ]; then
           # shellcheck disable=SC2206

@@ -1,10 +1,10 @@
-# wine-osu is our WineBuilder tarball (winello-v11.12-2 + wine-osu-patches/).
+# wine-osu is the WineBuilder tarball used by osu-winello.
 # Other pins still come from osu-winello (NelloKudo/osu-winello).
 {
   wineOsu = {
-    version = "11.12-2-wayland";
-    url = "https://github.com/gaavin/nix-osu-stable/releases/download/wine-osu-11.12-2-wayland/wine-osu-winello-fonts-wow64-11.12-2-x86_64.tar.xz";
-    hash = "sha256-yaLElrO3yA6eWgjYxXVdbuAvMEU920Ws6mgSS8THzB4=";
+    version = "11.12-3";
+    url = "https://github.com/NelloKudo/WineBuilder/releases/download/wine-osu-staging-11.12-3/wine-osu-winello-fonts-wow64-11.12-3-x86_64.tar.xz";
+    hash = "sha256-dmbd1ILutiH/zmTNeWtpTCCgFnoLycPnAO3SfhvmYQc=";
   };
 
   yawl = {

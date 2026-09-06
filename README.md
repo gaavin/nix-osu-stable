@@ -1,11 +1,8 @@
 <div align="center">
 
-# DO NOT USE THIS PACKAGE
-# THERE ARE BANNABLE PATCHES IN THIS WINE BUILD, WHICH WILL BE REMOVED SOON
-
 # nix-osu-stable
 
-**Play osu! stable on NixOS** — native integration using a custom patched wine (hooks osu's audio engine and routes audio to DAC through pipewire, providing the best low latency gameplay) (also enables direct scanout in opengl mode), Steam Runtime, and a prebuilt prefix. Also optionally includes a TUI based offset tool (works similarly to osu lazer's offset recomendation system).
+**Play osu! stable on NixOS** — native integration using wine-osu + Steam Runtime (the [osu-winello](https://github.com/NelloKudo/osu-winello) stack), a prebuilt prefix, and an optional TUI offset tool (works similarly to osu!lazer's offset recommendation system).
 This is for nixos, so naturally yes, beatmaps (downloaded from mirror), skins, settings, are all declarable.
 
 [![NixOS](https://img.shields.io/badge/NixOS-unstable-informational?logo=NixOS)](https://nixos.org)
@@ -69,8 +66,9 @@ nix run github:gaavin/nix-osu-stable
 
   programs.osu-stable = {
     enable = true;
-    offsetCalculator.enable = true:
-    environment.WINE_ENABLE_ABS_TABLET_HACK = "2";  # Tablet fix
+    offsetCalculator.enable = true;
+    # OTD absolute mode on Wayland is auto-detected; override if needed:
+    # environment.WINE_ENABLE_ABS_TABLET_HACK = "2";
     # location = "${config.xdg.dataHome}/nix-osu-stable";
   };
 }
@@ -92,7 +90,7 @@ osu-wine
 
 ## 🎵 Audio Offset
 
-Wine and BASS are patched in this build so the mixer timestamps against the DAC instead of a 30 ms WASAPI buffer. Set **Options → Audio → Offset** to around **−5 ms**.
+Wine adds some audio latency versus native Windows. osu-winello recommends **−40/−35 ms** universal Offset (or **−25 ms** if you use Audio Compatibility mode). Your mileage varies — keep an eye on the hit meter.
 
 Enable [osu-offset](https://github.com/gaavin/offset-calc-osu-stable) to measure from live hit error:
 
@@ -114,18 +112,15 @@ Run `osu-offset` next to `osu-wine`. After a map with ≥ 50 timed hits it print
 osu!stable presents with `wglSwapBuffers` (OpenGL), not a DXGI/Vulkan swapchain. The launcher prefers **native winewayland** whenever `WAYLAND_DISPLAY` is set:
 
 - Writes `HKCU\Software\Wine\Drivers` `Graphics=wayland,x11` (keeps host `DISPLAY` so pressure-vessel is happy).
-- winewayland binds the GL backbuffer on the **xdg_toplevel** (not a dummy-SHM parent + subsurface) so the compositor can KMS-scanout.
-- `wp_tearing_control` ASYNC is already on at swap interval 0.
 - NVIDIA `__GL_MaxFramesAllowed=1` and Mesa `mesa_glthread=false` to keep one frame in flight.
 
-Escape hatches:
+Escape hatch:
 
 ```nix
 programs.osu-stable.environment.WINE_OSU_USE_X11 = "1";          # X11 / XWayland
-programs.osu-stable.environment.WINE_WAYLAND_GL_TOPLEVEL = "0";  # old subsurface path
 ```
 
-Visual latency dropping a compositor frame can change how hits *feel*. Re-run `osu-offset` after switching present paths. Compositor must support tearing-control for the async flip (KWin, Hyprland, gamescope; Mutter is weaker).
+Visual latency dropping a compositor frame can change how hits *feel*. Re-run `osu-offset` after switching present paths.
 
 ---
 
@@ -136,7 +131,6 @@ Manage osu!stable options from Home Manager. Keys match [`osu!.*.cfg`](https://o
 ```nix
 programs.osu-stable = {
     enable = true;
-    environment.WINE_ENABLE_ABS_TABLET_HACK = "2";
     offsetCalculator.enable = true;
 
     settings = {
@@ -148,7 +142,7 @@ programs.osu-stable = {
       FrameSync = "Unlimited";
       IHateHavingFun = 1;
       IgnoreBeatmapSkins = 1;
-      Offset = -5;
+      Offset = -40;
       PopupDuringGameplay = 0;
       Skin = "Shigetora's Skin";
       VolumeUniversal = 50;
@@ -285,7 +279,7 @@ Opening `.osz` / `.osk` / `.osr` files or `osu://` links **reuses the running in
   logs/          Debug logs
 ```
 
-Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! itself auto-updates. Latency patches for the next wine-osu pin are in [`wine-osu-patches/`](./wine-osu-patches/).
+Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! itself auto-updates. Optional Wine-side patches for a custom rebuild live in [`wine-osu-patches/`](./wine-osu-patches/).
 
 ---
 
@@ -295,7 +289,6 @@ Nix pins wine-osu & yawl versions (edit [`versions.nix`](./versions.nix)); osu! 
 |-------|----------|
 | Hits feel late | Enable `offsetCalculator`, run `osu-offset` while you play, and set the printed Offset |
 | Wayland present broken | `programs.osu-stable.environment.WINE_OSU_USE_X11 = "1";` then relaunch |
-| Want the old GL subsurface | `WINE_WAYLAND_GL_TOPLEVEL=0` |
 | Audio crackling | Raise PipeWire quantum to `256` |
 | First launch hangs | Normal (downloading Steam Runtime); ensure network access |
 | Won't start after update | `osu-wine --kill` then relaunch |
@@ -344,7 +337,8 @@ nix build github:gaavin/nix-osu-stable#osu-wine
 
 Built on [osu-winello](https://github.com/NelloKudo/osu-winello) stack:
 
-- [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu (our latency overlay: [`wine-osu-patches/`](./wine-osu-patches/))
+- [NelloKudo/WineBuilder](https://github.com/NelloKudo/WineBuilder) — wine-osu
+- [whrvt/wine-osu-patches](https://github.com/whrvt/wine-osu-patches) — osu! Wine patches
 - [whrvt/yawl](https://github.com/whrvt/yawl) — Steam Runtime launcher
 - [EnderIce2/rpc-bridge](https://github.com/EnderIce2/rpc-bridge) — Discord RPC
 - [OpenAsar/arrpc](https://github.com/OpenAsar/arrpc) — Discord IPC

@@ -27,7 +27,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "Patched wine-osu (WineBuilder + nix-osu-stable latency overlay) for osu!stable";
+    description = "Patched wine-osu (WineBuilder winello-v11.12-3) for osu!stable";
     homepage = "https://github.com/gaavin/nix-osu-stable";
     license = lib.licenses.lgpl21Plus;
     platforms = [ "x86_64-linux" ];

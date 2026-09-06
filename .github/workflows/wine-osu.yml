@@ -28,7 +28,7 @@ jobs:
           repository: NelloKudo/WineBuilder
           path: WineBuilder
 
-      - name: Overlay latency patches
+      - name: Overlay optional Wine-side patches
         run: |
           mkdir -p WineBuilder/custompatches
           cp -a wine-osu-patches/*.patch WineBuilder/custompatches/
